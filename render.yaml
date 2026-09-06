@@ -1,0 +1,22 @@
+# Render Blueprint: one-click backend deploy (Docker image at repo root).
+# Secrets (SARVAM_API_KEY, MEMORY_LLM_KEY) are sync:false — Render asks for
+# them at apply time and never stores them in git. Everything else is
+# committed here so the dashboard form never needs touching.
+services:
+  - type: web
+    name: awaaz
+    runtime: docker
+    plan: free
+    branch: master
+    healthCheckPath: /healthz
+    envVars:
+      - key: MEMORY_LLM_URL
+        value: https://api.sarvam.ai/v1/chat/completions
+      - key: MEMORY_DB
+        value: /data/memory.db
+      - key: CORS_ORIGINS
+        value: http://localhost:3000
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: MEMORY_LLM_KEY
+        sync: false
