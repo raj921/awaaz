@@ -1,4 +1,5 @@
-import { Geist_Mono, Inter, Montserrat } from "next/font/google"
+import { Geist_Mono, Inter, Montserrat } from "next/font/google";
+import type { Metadata } from "next";
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -13,6 +14,12 @@ const fontMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
 })
+
+export const metadata: Metadata = {
+  title: "Awaaz — Hindi & Telugu voice AI",
+  description:
+    "Talk freely in Hindi or Telugu. Voice rooms, memory with a hard forget guarantee, and a Sarvam option.",
+};
 
 export default function RootLayout({
   children,
