@@ -42,3 +42,4 @@ research/memory/memory.db-wal
 research/memory/memory.db-shm
 research/training/endpoint.url
 cost.json
+.vercel

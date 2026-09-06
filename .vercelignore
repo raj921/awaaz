@@ -1,0 +1,12 @@
+.git/
+.venv/
+__pycache__/
+node_modules/
+frontend/awaaz-ui/node_modules/
+frontend/awaaz-ui/.next/
+data/
+graphify-out/
+.scratch/
+*.wav
+*.mp3
+.vercel/
