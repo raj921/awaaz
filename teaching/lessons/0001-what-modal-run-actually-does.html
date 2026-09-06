@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lesson 1 — What `modal run` actually does</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header>
+  <p class="kicker">Lesson 0001 · ~8 minutes</p>
+  <h1>What <code>modal run</code> actually does</h1>
+  <p class="meta">The command you are about to run: <code>.venv/bin/modal run research/training/train_qwen3_sft.py</code>. Mission: be able to narrate every stage of it in the interview. Reference: <a href="../reference/modal-pipeline-glossary.html">pipeline glossary</a>.</p>
+</header>
+
+<h2>The five ideas</h2>
+
+<div class="concept">
+<h3>1. Defining the App costs nothing</h3>
+<p>When Modal reads the file, <code>app = modal.App("qwen3-a1-sft")</code> is just a blueprint on your Mac — no cloud, no GPU, no money yet.</p>
+<p class="anchor">train_qwen3_sft.py:17</p>
+</div>
+
+<div class="concept">
+<h3>2. Your Mac runs only the entrypoint</h3>
+<p><code>modal run</code> starts at <code>@app.local_entrypoint main()</code> — on <em>your</em> machine. Its whole job is orchestration: call each heavy function with <code>.remote()</code>.</p>
+</div>
+
+<div class="concept">
+<h3>3. <code>.remote()</code> teleports the call</h3>
+<p>First <code>download_base.remote()</code> caches the base model on a cheap CPU container; then <code>train.remote(max_steps=30)</code> ships training to the H100. Your terminal blocks and streams their <code>print()</code>s back — that's why you'll see loss lines live.</p>
+</div>
+
+<div class="concept">
+<h3>4. The container is cooked from the image — once</h3>
+<p><code>Image.debian_slim().pip_install("torch", ...)</code> is the recipe. First run cooks it (~10 min: OS + downloads). Later runs reuse the cached image — rebuilds only happen when dependencies change. Inside: an <strong>H100 GPU</strong>, the mounted MaSaC file, and the Volume at <code>/root/adapter</code>.</p>
+<p class="anchor">train_qwen3_sft.py:18-25, 79</p>
+</div>
+
+<div class="concept">
+<h3>5. The Volume is what survives</h3>
+<p>Training writes the adapter to the Volume and calls <code>volume.commit()</code>. The container then dies — deliberately. Your adapter lives on the cloud disk, which is why a <em>different</em> container (serving) can read it tomorrow. <code>modal volume get</code> downloads it to your Mac.</p>
+<p class="anchor">train_qwen3_sft.py:115</p>
+</div>
+
+<h2>Predict before you peek</h2>
+<p>Click the stages below in the order you believe they happen (1st first). Then reveal.</p>
+<div id="order-mount"></div>
+<p><button class="option" onclick="revealOrder()">Reveal the real order</button></p>
+<p id="order-feedback" class="feedback"></p>
+
+<h2>Check yourself</h2>
+<p>Recall from memory — no scrolling up. Answers are shaped so format gives nothing away.</p>
+<div id="quiz-mount"></div>
+
+<div class="next">
+<h3>Your turn — with the real thing</h3>
+<p>Run the zero-cost check and read its output as the author:</p>
+<pre>.venv/bin/python research/training/validate_scripts.py</pre>
+<p>Then, before running <code>modal run</code>: write down the 6 log lines you expect to see, in order (hint: <code>TRAIN_DATA examples=...</code> is first; <code>TRAIN_DONE ...</code> is last). Compare with reality — every mismatch is a lesson-2 topic.</p>
+<p><strong>Primary source:</strong> <a href="https://modal.com/docs/guide/execution_model">Modal — Execution model</a> (15 min read; authoritative for ideas 1-5).</p>
+<p>Anything fuzzy — the <code>-100</code> masking, <code>commit()</code>, warm vs cold — <strong>ask me right now in the chat</strong>. I'm your teacher; no question is too small.</p>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+const stages = [
+  { id: "a", text: "Container boots on H100 with cached image", at: 5 },
+  { id: "b", text: "main() runs on your Mac", at: 1 },
+  { id: "c", text: "Adapter saved + volume.commit()", at: 6 },
+  { id: "d", text: "Blueprint App defined (no cost)", at: 2 },
+  { id: "e", text: "train.remote() teleports the call", at: 3 },
+  { id: "f", text: "Image built/cached from recipe", at: 4 },
+];
+const picked = [];
+const mount = document.getElementById("order-mount");
+[...stages].sort(() => Math.random() - 0.5).forEach(s => {
+  const div = document.createElement("div");
+  div.className = "stage";
+  div.innerHTML = `<span class="num"></span> ${s.text}`;
+  div.onclick = () => {
+    if (picked.includes(s.id)) return;
+    picked.push(s.id);
+    div.querySelector(".num").textContent = picked.length + ".";
+  };
+  mount.appendChild(div);
+});
+function revealOrder() {
+  const correct = stages.filter(s => picked.indexOf(s.id) === s.at - 1).length;
+  document.querySelectorAll("#order-mount .stage").forEach(div => {
+    const id = stages.find(s => div.textContent.includes(s.text)).id;
+    div.querySelector(".num").textContent = stages.find(s => s.id === id).at + ".";
+  });
+  document.getElementById("order-feedback").textContent =
+    `You placed ${correct}/6 correctly. Full order: define → entrypoint on Mac → .remote() → image/container → train on H100 → save + commit.`;
+}
+
+initQuiz("quiz-mount", [
+  { q: "Where does the local entrypoint main() execute?", options: ["On your laptop", "Inside the GPU", "Inside the volume"], answer: 0,
+    why: "The entrypoint is the one part that stays on your machine; it calls the heavy function with .remote()." },
+  { q: "What does calling train.remote(30) do?", options: ["Runs on rented H100", "Runs on your MacBook", "Runs inside the image"], answer: 0,
+    why: ".remote() sends the function to Modal's cloud hardware; your terminal just streams its output." },
+  { q: "When does the container image rebuild from scratch?", options: ["When pip dependencies change", "When training loss changes", "When your terminal restarts"], answer: 0,
+    why: "The image is the dependency recipe — it is cached and only rebuilds when the recipe changes." },
+  { q: "Why must training call volume.commit()?", options: ["To persist adapter files", "To delete adapter files", "To print adapter files"], answer: 0,
+    why: "Without commit, writes die with the container. The Volume is the only thing serving will ever see." },
+]);
+</script>
+</body>
+</html>

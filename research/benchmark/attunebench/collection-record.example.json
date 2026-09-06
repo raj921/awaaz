@@ -1,0 +1,65 @@
+{
+  "conversation_id": "project-hi-0001",
+  "source": "project_owned",
+  "collection_status": "collected|transcribed|reviewed|annotated|approved|excluded",
+  "split": "train|dev|test|audit|unassigned",
+  "language": "hi|te|hinglish|tenglish|mixed",
+  "script": "native|romanized|mixed",
+  "topic": "work_school",
+  "participant": {
+    "participant_id": "participant-001",
+    "speaker_id": "speaker-001",
+    "consent_id": "consent-001",
+    "native_language": "hi",
+    "additional_languages": ["en"]
+  },
+  "audio": {
+    "conversation_path": "restricted/audio/project-hi-0001.wav",
+    "sample_rate_hz": 16000,
+    "channels": 1,
+    "duration_seconds": 0,
+    "sha256": "sha256:record-after-capture"
+  },
+  "consent": {
+    "recorded": true,
+    "audio_use": true,
+    "research_use": true,
+    "model_training_use": true,
+    "evaluation_use": true,
+    "withdrawal_available": true,
+    "consent_version": "v1",
+    "consented_on": "YYYY-MM-DD"
+  },
+  "turns": [
+    {
+      "turn_id": 1,
+      "speaker": "user",
+      "text": "",
+      "audio_path": "restricted/audio/project-hi-0001/turn-001.wav",
+      "transcript_status": "native_reviewed",
+      "emotion": {
+        "primary": "worry",
+        "secondary": "hope",
+        "valence": -0.25,
+        "arousal": 0.55,
+        "intensity": 0.6,
+        "confidence": 0.9,
+        "trajectory": "initial",
+        "evidence": ""
+      },
+      "goal": "comfort"
+    }
+  ],
+  "memory_annotations": [],
+  "response_preferences": [],
+  "safety": {"label": "none"},
+  "provenance": {
+    "collection_date": "YYYY-MM-DD",
+    "annotator_ids": ["annotator-001", "annotator-002"],
+    "pii_reviewed": true,
+    "native_reviewed": true,
+    "source_version": "project-v1",
+    "checksum": "sha256:record-after-finalization"
+  },
+  "exclusion": {"excluded": false, "reason": null}
+}

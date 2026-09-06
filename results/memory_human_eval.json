@@ -1,0 +1,11 @@
+{
+  "checks": {
+    "working_memory": true,
+    "rehearsal_ranking": true,
+    "salience_ranking": true,
+    "decay_and_survival": true,
+    "hard_forget_holds": true,
+    "relearn_after_forget": true
+  },
+  "failures": []
+}

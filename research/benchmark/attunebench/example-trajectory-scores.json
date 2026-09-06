@@ -1,0 +1,24 @@
+{
+  "task": "trajectory",
+  "conversations_scored": 1,
+  "conversations_missing_predictions": [],
+  "turns_scored": 3,
+  "overall": {
+    "primary_accuracy": 1.0,
+    "secondary_accuracy": 0.6666666666666666,
+    "valence_mae": 0.0,
+    "arousal_mae": 0.0,
+    "intensity_mae": 0.0,
+    "trajectory_accuracy": 1.0
+  },
+  "by_language": {
+    "hi": {
+      "turns_scored": 3,
+      "primary_accuracy": 1.0,
+      "valence_mae": 0.0,
+      "arousal_mae": 0.0,
+      "intensity_mae": 0.0,
+      "trajectory_accuracy": 1.0
+    }
+  }
+}

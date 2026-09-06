@@ -1,0 +1,57 @@
+/* Shared course stylesheet — every lesson links this. Tufte-ish, print-friendly. */
+:root {
+  --paper: #fffdf7;
+  --ink: #1a1a1a;
+  --muted: #6b6455;
+  --accent: #8b2500;
+  --code-bg: #f4efe3;
+  --correct: #1a7a3a;
+  --incorrect: #a02020;
+  --line: #e2dcc9;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 19px;
+  line-height: 1.55;
+  margin: 0 auto;
+  max-width: 720px;
+  padding: 3rem 1.4rem 6rem;
+}
+header h1 { font-size: 1.7rem; font-weight: 600; margin: 0 0 0.3rem; }
+header .kicker { color: var(--accent); font-size: 0.85rem; letter-spacing: 0.12em; text-transform: uppercase; margin: 0 0 0.4rem 0; }
+header .meta { color: var(--muted); font-size: 0.9rem; margin: 0 0 1.6rem; }
+h2 { font-size: 1.25rem; margin: 2.2rem 0 0.6rem; border-bottom: 1px solid var(--line); padding-bottom: 0.3rem; }
+.concept { margin: 1.2rem 0; padding: 0.9rem 1.1rem; border-left: 3px solid var(--accent); background: rgba(139, 37, 0, 0.04); }
+.concept h3 { margin: 0 0 0.35rem; font-size: 1.05rem; }
+.concept p { margin: 0.25rem 0; }
+code, pre { font-family: "SF Mono", "Menlo", Consolas, monospace; font-size: 0.85em; }
+code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 3px; }
+pre { background: var(--code-bg); padding: 0.8rem 1rem; overflow-x: auto; border-radius: 4px; line-height: 1.4; }
+.anchor { color: var(--muted); font-size: 0.78rem; font-family: "SF Mono", Menlo, monospace; }
+a { color: var(--accent); }
+.quiz { margin: 1.5rem 0; }
+.quiz .question { margin: 1.1rem 0; padding: 0.8rem 1rem; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.quiz .question p.qtext { margin: 0 0 0.6rem; font-weight: 600; }
+.quiz button.option {
+  display: block; width: 100%; text-align: left; margin: 0.35rem 0;
+  padding: 0.5rem 0.8rem; font: inherit; font-size: 0.95rem;
+  background: var(--code-bg); border: 1px solid var(--line); border-radius: 5px; cursor: pointer;
+}
+.quiz button.option:hover:not(:disabled) { border-color: var(--accent); }
+.quiz button.option.correct { background: #e3f3e8; border-color: var(--correct); }
+.quiz button.option.incorrect { background: #f7e4e4; border-color: var(--incorrect); }
+.quiz button.option:disabled { cursor: default; opacity: 0.85; }
+.quiz .feedback { margin: 0.5rem 0 0; font-size: 0.88rem; color: var(--muted); }
+.quiz .score { font-weight: 600; margin-top: 1rem; }
+.stage { border: 1px solid var(--line); border-radius: 6px; background: #fff; padding: 0.7rem 0.9rem; margin: 0.5rem 0; cursor: pointer; user-select: none; }
+.stage .num { display: inline-block; min-width: 1.4rem; font-weight: 700; color: var(--accent); }
+.next { margin-top: 2.5rem; padding: 1rem 1.2rem; border: 2px solid var(--accent); border-radius: 8px; }
+.next h3 { margin: 0 0 0.4rem; font-size: 1.05rem; }
+@media print {
+  body { max-width: none; padding: 0.5in; font-size: 12pt; background: #fff; }
+  .quiz button.option { border: 1px solid #999; }
+  .next { border: 1px solid #999; }
+}

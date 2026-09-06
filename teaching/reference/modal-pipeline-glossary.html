@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Glossary — Modal Training Pipeline (research/training/)</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header>
+  <p class="kicker">Reference · print me</p>
+  <h1>Modal Training Pipeline Glossary</h1>
+  <p class="meta">Every term anchors to your actual code: <code>research/training/train_qwen3_sft.py</code> (T) and <code>serve_qwen3.py</code> (S). Reviewed before interviews.</p>
+</header>
+
+<h2>Modal — the cloud side</h2>
+<div class="concept"><h3>Modal App</h3><p>The blueprint: a named bundle of functions declared in one file. Defining it costs nothing; it only runs when invoked. <span class="anchor">T:17</span></p></div>
+<div class="concept"><h3>Container image</h3><p>The recipe (OS + pip installs) a container is cooked from. Built once, cached; rebuilds only when dependencies change. <span class="anchor">T:18</span></p></div>
+<div class="concept"><h3>@app.function</h3><p>Marks a function for remote execution with hardware attached — <code>gpu="H100"</code> here. The function body runs only inside a container. <span class="anchor">T:92</span></p></div>
+<div class="concept"><h3>.remote()</h3><p>The teleport call: runs the decorated function in Modal's cloud, blocks your terminal until it returns, streams its prints back. <span class="anchor">T: local_entrypoint</span></p></div>
+<div class="concept"><h3>@app.local_entrypoint</h3><p>The part that executes on <em>your</em> Mac — <code>modal run</code> starts here. It just orchestrates: call each heavy function with <code>.remote()</code>.</p></div>
+<div class="concept"><h3>Volume</h3><p>Cloud disk that outlives containers. The adapter written by training is read later by serving — different containers, same disk. <span class="anchor">T:25, S:19</span></p></div>
+<div class="concept"><h3>volume.commit()</h3><p>Flushes writes to the Volume. Skip it and the container's changes die with the container. <span class="anchor">T:126-129</span></p></div>
+<div class="concept"><h3>download_base()</h3><p>CPU-only function that snapshots the 3.4 GB base model to the Volume once — GPU containers then load from disk and never burn billed time downloading. <span class="anchor">T:77-82</span></p></div>
+<div class="concept"><h3>add_local_file</h3><p>Adds one local file (the MaSaC dataset) to the container's filesystem — mounted at startup, no image rebuild needed. <span class="anchor">T:18-21</span></p></div>
+<div class="concept"><h3>modal run vs modal deploy</h3><p><code>run</code> = execute once, watch logs, container dies after. <code>deploy</code> = leave a standing endpoint alive for requests (serving). <span class="anchor">S: app "qwen3-a1-serve"</span></p></div>
+<div class="concept"><h3>scaledown_window=600</h3><p>Keeps the serving container warm 10 minutes after each request — the cold-start (minutes) never hits the latency budget. <span class="anchor">S:47</span></p></div>
+<div class="concept"><h3>@modal.fastapi_endpoint(method="POST")</h3><p>Turns the function into an HTTPS URL that accepts POST JSON and returns JSON. <span class="anchor">S:48</span></p></div>
+
+<h2>PEFT — the fine-tuning side</h2>
+<div class="concept"><h3>LoRA</h3><p>Freeze the model; train tiny low-rank matrices beside attention projections. Adapter ≈ tens of MB instead of 3.4 GB.</p></div>
+<div class="concept"><h3>DoRA</h3><p>LoRA + separate magnitude/direction decomposition — near full-fine-tune accuracy, zero added inference cost after merge. Enabled with one flag. <span class="anchor">T:112 (use_dora=True)</span></p></div>
+<div class="concept"><h3>LoraConfig(r=16, lora_alpha=32)</h3><p>Rank 16 = adapter capacity; alpha ≈ 2×r is the conventional scaling. Targets: q/k/v/o attention projections. <span class="anchor">T:108-111</span></p></div>
+<div class="concept"><h3>get_peft_model / PeftModel.from_pretrained</h3><p>Wraps base + config for training / reloads a saved adapter onto the base for inference. <span class="anchor">T:108, S:38</span></p></div>
+<div class="concept"><h3>Served unmerged (real lesson)</h3><p>DoRA adapters merged into bf16 weights produced corrupted output (one garbage token for every prompt) — the adapter is served live instead. Cost: ~20 ms extra; truth: the model actually works. <span class="anchor">S:38</span></p></div>
+<div class="concept"><h3>Prompt masking (-100)</h3><p>Loss is computed only on the assistant's tokens; prompt tokens are labelled -100 (ignored). Labels are the pure content + &lt;|im_end|&gt; — the raw chat template would pollute them with think-wrappers the model then dutifully repeats. <span class="anchor">T:63</span></p></div>
+
+<h2>Serving — the latency side</h2>
+<div class="concept"><h3>server_ms / first-token latency</h3><p>Wall time of generating exactly ONE token, measured inside the container with <code>time.perf_counter()</code>. Budget: &lt; 200 ms warm. <span class="anchor">S:58-64</span></p></div>
+<div class="concept"><h3>Why server-side</h3><p>Your India→US round-trip (200-300 ms) would pollute a client-side number; the budget measures the serving infra, not geography.</p></div>
+<div class="concept"><h3>Warm vs cold</h3><p>Cold = container boots + weights load (minutes). Warm = model resident in GPU memory (milliseconds). Budgets apply to warm only.</p></div>
+<div class="concept"><h3>vLLM (upgrade path)</h3><p>Production serving engine — multi-LoRA hot-swap, continuous batching. Raw <code>transformers.generate</code> proves the budget; vLLM earns the throughput.</p></div>
+</body>
+</html>

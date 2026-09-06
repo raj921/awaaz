@@ -1,0 +1,58 @@
+{
+  "conversation_id": "project-hi-0001",
+  "turn_id": 3,
+  "annotator_id": "annotator-001",
+  "annotation_language": "hi",
+  "turn_annotation": {
+    "primary_emotion": "worry",
+    "secondary_emotion": "hope",
+    "valence": -0.25,
+    "arousal": 0.55,
+    "intensity": 0.6,
+    "confidence": 0.9,
+    "trajectory": "intensifying",
+    "evidence_native": "",
+    "goal": "comfort",
+    "goal_secondary": null,
+    "memory_candidate": {
+      "type": "preference",
+      "should_store": "yes",
+      "sensitivity": "ordinary",
+      "future_usefulness": 0.8,
+      "explicit_remember": false,
+      "conflict": "no",
+      "should_forget": "no"
+    },
+    "safety": "none"
+  },
+  "response_judgment": {
+    "blind_id": "response-a",
+    "observed_behavior": {
+      "acknowledges_emotion": "yes",
+      "reflects_detail": "yes",
+      "handles_mixed_emotion": "not_applicable",
+      "matches_seriousness": "yes",
+      "calibrates_intensity": "yes",
+      "asks_before_advice": "yes",
+      "goal_fit": "yes",
+      "preserves_agency": "yes",
+      "adapts_after_correction": "not_applicable",
+      "honors_language": "yes",
+      "unsupported_assumption": "no",
+      "unsupported_memory": "no",
+      "respects_forgetting": "not_applicable",
+      "generic_comfort": "no",
+      "premature_direction": "no",
+      "unsupported_diagnosis": "no"
+    },
+    "preferred_behavior": {},
+    "voice_scores": null,
+    "reason_native": ""
+  },
+  "agreement": {
+    "second_annotator_id": "annotator-002",
+    "adjudicated": false,
+    "adjudicator_id": null,
+    "disagreement_reason": null
+  }
+}

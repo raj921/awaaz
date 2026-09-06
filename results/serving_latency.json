@@ -1,0 +1,21 @@
+{
+  "endpoint": "https://raj315920--qwen3-a1-serve-first-token.modal.run",
+  "budget_ms": 200,
+  "measurements": [
+    {
+      "server_ms": 48.6,
+      "client_ms_measured": 1127.75,
+      "token": "म"
+    },
+    {
+      "server_ms": 50.17,
+      "client_ms_measured": 1131.67,
+      "token": "क"
+    },
+    {
+      "server_ms": 58.97,
+      "client_ms_measured": 1182.62,
+      "token": "ह"
+    }
+  ]
+}

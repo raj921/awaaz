@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rumikhire.local/schemas/attunebench/trajectory-prediction.schema.json",
+  "title": "Emotional Trajectory Prediction",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["conversation_id", "model_id", "model_revision", "predictions"],
+  "properties": {
+    "conversation_id": {"type": "string"},
+    "model_id": {"type": "string"},
+    "model_revision": {"type": "string"},
+    "predictions": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["turn_id", "primary", "valence", "arousal", "intensity", "trajectory"],
+        "properties": {
+          "turn_id": {"type": "integer", "minimum": 1},
+          "primary": {"type": "string", "minLength": 1},
+          "secondary": {"type": ["string", "null"]},
+          "valence": {"type": "number", "minimum": -1, "maximum": 1},
+          "arousal": {"type": "number", "minimum": 0, "maximum": 1},
+          "intensity": {"type": "number", "minimum": 0, "maximum": 1},
+          "trajectory": {"type": "string", "enum": ["initial", "emerging", "intensifying", "stable", "softening", "shifting", "mixed", "unclear"]},
+          "summary": {"type": ["string", "null"]},
+          "cause": {"type": ["string", "null"]}
+        }
+      }
+    }
+  }
+}

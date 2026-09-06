@@ -1,0 +1,42 @@
+{
+  "generated_on": "2026-09-01",
+  "model": "tfidf-logreg",
+  "task": "m2h2_humor",
+  "train": 5300,
+  "dev": {
+    "macro_f1": 0.5399,
+    "accuracy": 0.5686,
+    "per_class": {
+      "humor": {
+        "precision": 0.4745,
+        "recall": 0.3846,
+        "f1": 0.4248,
+        "support": 169.0
+      },
+      "non-humor": {
+        "precision": 0.6162,
+        "recall": 0.6987,
+        "f1": 0.6549,
+        "support": 239.0
+      }
+    }
+  },
+  "test": {
+    "macro_f1": 0.5642,
+    "accuracy": 0.5996,
+    "per_class": {
+      "humor": {
+        "precision": 0.5068,
+        "recall": 0.3886,
+        "f1": 0.4399,
+        "support": 193.0
+      },
+      "non-humor": {
+        "precision": 0.6413,
+        "recall": 0.743,
+        "f1": 0.6884,
+        "support": 284.0
+      }
+    }
+  }
+}

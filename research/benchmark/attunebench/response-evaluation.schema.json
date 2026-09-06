@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rumikhire.local/schemas/attunebench/response-evaluation.schema.json",
+  "title": "Blinded Emotional Response Evaluation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["conversation_id", "turn_id", "model_variants", "responses", "human_judgments", "provenance"],
+  "properties": {
+    "conversation_id": {"type": "string"},
+    "turn_id": {"type": "integer", "minimum": 1},
+    "model_variants": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"type": "object", "additionalProperties": false, "required": ["blind_id", "model_id", "revision"], "properties": {"blind_id": {"type": "string"}, "model_id": {"type": "string"}, "revision": {"type": "string"}, "decoding": {"type": "object"}}}
+    },
+    "responses": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"type": "object", "additionalProperties": false, "required": ["blind_id", "text"], "properties": {"blind_id": {"type": "string"}, "text": {"type": "string", "minLength": 1}, "audio": {"type": ["string", "null"]}, "timings": {"type": "object"}}}
+    },
+    "human_judgments": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["annotator_id", "preferred_blind_id", "goal_fit", "emotional_appropriateness", "intensity_calibration", "agency", "reason_native"],
+        "properties": {
+          "annotator_id": {"type": "string"},
+          "preferred_blind_id": {"type": "string"},
+          "goal_fit": {"type": "string", "enum": ["a", "b", "tie", "both_bad"]},
+          "emotional_appropriateness": {"type": "string", "enum": ["a", "b", "tie", "both_bad"]},
+          "intensity_calibration": {"type": "string", "enum": ["a", "b", "tie", "both_bad"]},
+          "agency": {"type": "string", "enum": ["a", "b", "tie", "both_bad"]},
+          "observed_behavior": {"type": "object"},
+          "preferred_behavior": {"type": "object"},
+          "memory_behavior": {"type": "object"},
+          "voice_scores": {"type": "object"},
+          "reason_native": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blind_order_seed", "annotation_language", "adjudicated"],
+      "properties": {"blind_order_seed": {"type": "integer"}, "annotation_language": {"type": "string", "enum": ["hi", "te", "mixed"]}, "adjudicated": {"type": "boolean"}}
+    }
+  }
+}

@@ -1,0 +1,4 @@
+conversation_id,language_slice,participant_ids,collection_date,status,turns,topic,safety_review,annotators,notes
+project-hi-0001,hi,participant-001,2026-09-05,recruited,,,,,
+project-te-0001,te,participant-002,2026-09-05,scheduled,,,,,
+project-hing-0001,hinglish,participant-003,,recruited,,,,,

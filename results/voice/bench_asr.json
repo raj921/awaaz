@@ -1,0 +1,1 @@
+{"clips": 199, "models": {"medium": {"hi_wer": 114.8, "te_wer": 138.74, "sec_per_clip": 1.362}, "small": {"hi_wer": 168.02, "te_wer": 160.44, "sec_per_clip": 0.863}, "v1": {"hi_wer": 41.54, "te_wer": 69.23, "sec_per_clip": 0.568}, "v2": {"hi_wer": 31.73, "te_wer": 56.41, "sec_per_clip": 0.585}}}

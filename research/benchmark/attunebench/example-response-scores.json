@@ -1,0 +1,88 @@
+{
+  "task": "response_preference",
+  "items_scored": 1,
+  "human_judgments": 2,
+  "preference_distribution": {
+    "response-b": 2
+  },
+  "preference_rates": {
+    "response-b": 1.0
+  },
+  "dimension_distributions": {
+    "goal_fit": {
+      "b": 2
+    },
+    "emotional_appropriateness": {
+      "b": 2
+    },
+    "intensity_calibration": {
+      "b": 2
+    },
+    "agency": {
+      "b": 2
+    }
+  },
+  "selected_model_counts": {
+    "Qwen/Qwen3-1.7B-emotional-v1": 2
+  },
+  "selected_model_rates": {
+    "Qwen/Qwen3-1.7B-emotional-v1": 1.0
+  },
+  "agreement": {
+    "preferred_blind_id": {
+      "pairwise": [
+        {
+          "annotator_a": "annotator-001",
+          "annotator_b": "annotator-002",
+          "items": 1,
+          "cohen_kappa": 1.0
+        }
+      ],
+      "mean_cohen_kappa": 1.0
+    },
+    "goal_fit": {
+      "pairwise": [
+        {
+          "annotator_a": "annotator-001",
+          "annotator_b": "annotator-002",
+          "items": 1,
+          "cohen_kappa": 1.0
+        }
+      ],
+      "mean_cohen_kappa": 1.0
+    },
+    "emotional_appropriateness": {
+      "pairwise": [
+        {
+          "annotator_a": "annotator-001",
+          "annotator_b": "annotator-002",
+          "items": 1,
+          "cohen_kappa": 1.0
+        }
+      ],
+      "mean_cohen_kappa": 1.0
+    },
+    "intensity_calibration": {
+      "pairwise": [
+        {
+          "annotator_a": "annotator-001",
+          "annotator_b": "annotator-002",
+          "items": 1,
+          "cohen_kappa": 1.0
+        }
+      ],
+      "mean_cohen_kappa": 1.0
+    },
+    "agency": {
+      "pairwise": [
+        {
+          "annotator_a": "annotator-001",
+          "annotator_b": "annotator-002",
+          "items": 1,
+          "cohen_kappa": 1.0
+        }
+      ],
+      "mean_cohen_kappa": 1.0
+    }
+  }
+}

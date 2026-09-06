@@ -1,0 +1,32 @@
+{
+  "dataset_name": "native-indic-emotional-conversation-v1",
+  "core_target_counts": {
+    "train": 140,
+    "dev": 30,
+    "test": 30
+  },
+  "audit_target_count": 20,
+  "total_approved_records": 220,
+  "core_language_targets": {
+    "hi": 80,
+    "te": 80,
+    "hinglish": 20,
+    "tenglish": 10,
+    "mixed": 10
+  },
+  "split_language_targets": {
+    "train": {"hi": 56, "te": 56, "hinglish": 14, "tenglish": 7, "mixed": 7},
+    "dev": {"hi": 12, "te": 12, "hinglish": 3, "tenglish": 2, "mixed": 1},
+    "test": {"hi": 12, "te": 12, "hinglish": 3, "tenglish": 1, "mixed": 2},
+    "audit": {"hi": 10, "te": 10, "hinglish": 0, "tenglish": 0, "mixed": 0}
+  },
+  "rules": [
+    "split complete conversations, never turns",
+    "speaker-disjoint audio test where feasible",
+    "private test and audit are excluded from training and prompt tuning",
+    "HumDial-EIBench is external and excluded from every training split",
+    "permission-gated sources require a recorded approval before inclusion"
+  ],
+  "required_provenance": ["source", "source_version", "consent", "checksum", "collection_date", "annotator_ids"],
+  "status": "example_manifest_not_a_claim_of_collected_data"
+}

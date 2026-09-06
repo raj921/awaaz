@@ -1,0 +1,35 @@
+# Local secrets and environments
+.env
+.env.*
+!.env.example
+.venv/
+
+# Downloaded third-party datasets and derived artifacts
+/data/raw/
+/data/processed/
+/data/audio/
+/data/checkpoints/
+
+# Model artifacts
+*.safetensors
+*.pt
+*.pth
+*.bin
+*.wav
+*.mp3
+
+# Python and OS files
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Frontend
+frontend/attunebench-ui/node_modules/
+frontend/attunebench-ui/.next/
+frontend/attunebench-ui/out/
+
+# Local runtime artifacts (never commit)
+graphify-out/
+research/memory/.memory_snap.pkl
+research/training/endpoint.url
+cost.json

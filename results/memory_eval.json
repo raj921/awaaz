@@ -1,0 +1,12 @@
+{
+  "scenarios": 30,
+  "active_facts_required": 27,
+  "self_recall_hits": 27,
+  "forgotten_leaks": 0,
+  "turn_text_retrieval_hits_measured": 66,
+  "conflict_supersede_pass": true,
+  "api_forget_pass": true,
+  "injection_blocks": 66,
+  "injection_leaks": 0,
+  "failures": []
+}

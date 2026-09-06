@@ -1,0 +1,120 @@
+{
+  "config": {
+    "data": "research/benchmark/locomo10.json",
+    "synthetic": false,
+    "mode": "memory",
+    "k": 10,
+    "answer_model": null,
+    "judge_model": null,
+    "extract": false,
+    "embed": null,
+    "human_decay": false,
+    "include_adversarial": false,
+    "samples": null,
+    "limit_qa": null,
+    "out": "results/locomo_eval.json"
+  },
+  "ingest": [
+    {
+      "sample": "conv-26",
+      "turns": 419,
+      "memories": 419,
+      "ingest_s": 0.8
+    },
+    {
+      "sample": "conv-30",
+      "turns": 369,
+      "memories": 369,
+      "ingest_s": 0.6
+    },
+    {
+      "sample": "conv-41",
+      "turns": 663,
+      "memories": 663,
+      "ingest_s": 1.2
+    },
+    {
+      "sample": "conv-42",
+      "turns": 629,
+      "memories": 629,
+      "ingest_s": 0.9
+    },
+    {
+      "sample": "conv-43",
+      "turns": 680,
+      "memories": 680,
+      "ingest_s": 1.0
+    },
+    {
+      "sample": "conv-44",
+      "turns": 675,
+      "memories": 675,
+      "ingest_s": 1.2
+    },
+    {
+      "sample": "conv-47",
+      "turns": 689,
+      "memories": 689,
+      "ingest_s": 1.0
+    },
+    {
+      "sample": "conv-48",
+      "turns": 681,
+      "memories": 681,
+      "ingest_s": 1.2
+    },
+    {
+      "sample": "conv-49",
+      "turns": 509,
+      "memories": 509,
+      "ingest_s": 0.6
+    },
+    {
+      "sample": "conv-50",
+      "turns": 568,
+      "memories": 568,
+      "ingest_s": 0.8
+    }
+  ],
+  "retrieval_latency_ms": {
+    "p50": 1.14,
+    "p95": 1.9,
+    "max": 9.28
+  },
+  "by_category": {
+    "temporal": {
+      "n": 321,
+      "evidence_recall@k": 0.5262,
+      "f1": null,
+      "llm_judge_acc": null
+    },
+    "open_domain": {
+      "n": 96,
+      "evidence_recall@k": 0.2237,
+      "f1": null,
+      "llm_judge_acc": null
+    },
+    "multi_hop": {
+      "n": 282,
+      "evidence_recall@k": 0.1689,
+      "f1": null,
+      "llm_judge_acc": null
+    },
+    "single_hop": {
+      "n": 841,
+      "evidence_recall@k": 0.5745,
+      "f1": null,
+      "llm_judge_acc": null
+    },
+    "ALL": {
+      "n": 1540,
+      "evidence_recall@k": 0.4689,
+      "f1": null,
+      "llm_judge_acc": null
+    }
+  },
+  "llm_calls": {
+    "answer": 0,
+    "judge": 0
+  }
+}

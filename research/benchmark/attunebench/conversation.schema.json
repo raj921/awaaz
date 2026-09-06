@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rumikhire.local/schemas/attunebench/conversation.schema.json",
+  "title": "Native Indic Emotional Conversation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["conversation_id", "source", "split", "language", "script", "participant", "consent", "turns", "safety", "provenance"],
+  "properties": {
+    "conversation_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"},
+    "source": {"type": "string", "enum": ["project_owned", "emoinhindi", "bhaav", "doctor_patient_indic", "iiith_temd", "telugu_emotion_identification"]},
+    "collection_status": {"type": "string", "enum": ["collected", "transcribed", "reviewed", "annotated", "approved", "excluded"]},
+    "split": {"type": "string", "enum": ["train", "dev", "test", "audit", "unassigned"]},
+    "language": {"type": "string", "enum": ["hi", "te", "hinglish", "tenglish", "mixed"]},
+    "script": {"type": "string", "enum": ["native", "romanized", "mixed"]},
+    "topic": {"type": "string", "enum": ["work_school", "family", "friends", "romantic_relationship", "health", "money", "hobbies", "learning", "celebration", "identity", "other"]},
+    "participant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["participant_id", "speaker_id"],
+      "properties": {
+        "participant_id": {"type": "string", "pattern": "^participant-[a-z0-9-]+$"},
+        "speaker_id": {"type": "string", "pattern": "^speaker-[a-z0-9-]+$"},
+        "consent_id": {"type": ["string", "null"]},
+        "native_language": {"type": ["string", "null"]},
+        "additional_languages": {"type": "array", "items": {"type": "string"}},
+        "age_band": {"type": "string", "enum": ["18_24", "25_34", "35_44", "45_54", "55_plus", "not_collected"]}
+      }
+    },
+    "audio": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["conversation_path", "sample_rate_hz", "channels", "duration_seconds", "sha256"],
+      "properties": {
+        "conversation_path": {"type": "string", "minLength": 1},
+        "sample_rate_hz": {"type": "integer", "minimum": 1},
+        "channels": {"type": "integer", "minimum": 1},
+        "duration_seconds": {"type": "number", "minimum": 0},
+        "sha256": {"type": "string", "minLength": 1}
+      }
+    },
+    "consent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recorded", "audio_use", "withdrawal_available", "consent_version"],
+      "properties": {
+        "recorded": {"type": "boolean", "const": true},
+        "audio_use": {"type": "boolean", "const": true},
+        "research_use": {"type": "boolean"},
+        "model_training_use": {"type": "boolean"},
+        "evaluation_use": {"type": "boolean"},
+        "withdrawal_available": {"type": "boolean", "const": true},
+        "consent_version": {"type": "string", "minLength": 1},
+        "consented_on": {"type": ["string", "null"], "format": "date"}
+      }
+    },
+    "turns": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["turn_id", "speaker", "text"],
+        "properties": {
+          "turn_id": {"type": "integer", "minimum": 1},
+          "speaker": {"type": "string", "enum": ["user", "assistant", "other"]},
+          "text": {"type": "string", "minLength": 1, "maxLength": 5000},
+          "audio": {"type": ["string", "null"]},
+          "emotion": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["primary", "valence", "arousal", "intensity", "confidence", "trajectory", "evidence"],
+            "properties": {
+              "primary": {"type": "string", "minLength": 1},
+              "secondary": {"type": ["string", "null"]},
+              "valence": {"type": "number", "minimum": -1, "maximum": 1},
+              "arousal": {"type": "number", "minimum": 0, "maximum": 1},
+              "intensity": {"type": "number", "minimum": 0, "maximum": 1},
+              "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+              "trajectory": {"type": "string", "enum": ["initial", "emerging", "intensifying", "stable", "softening", "shifting", "mixed", "unclear"]},
+              "evidence": {"type": "string", "minLength": 1}
+            }
+          },
+          "goal": {"type": "string", "enum": ["vent", "comfort", "reflection", "advice", "celebration", "companionship", "practice", "message_drafting", "information", "safety_help", "closure", "unclear"]}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"speaker": {"const": "user"}}},
+            "then": {"required": ["emotion", "goal"]}
+          },
+          {
+            "if": {"properties": {"speaker": {"const": "assistant"}}},
+            "then": {"not": {"required": ["emotion", "goal"]}}
+          }
+        ]
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label"],
+      "properties": {"label": {"type": "string", "enum": ["none", "ambiguous_distress", "self_harm_or_harm_signal", "medical_urgency", "abuse_or_danger", "privacy_risk"]}}
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collection_date", "annotator_ids", "pii_reviewed", "native_reviewed"],
+      "properties": {
+        "collection_date": {"type": "string", "format": "date"},
+        "annotator_ids": {"type": "array", "minItems": 2, "items": {"type": "string"}},
+        "pii_reviewed": {"type": "boolean", "const": true},
+        "native_reviewed": {"type": "boolean", "const": true},
+        "source_version": {"type": ["string", "null"]},
+        "checksum": {"type": ["string", "null"]}
+      }
+    },
+    "exclusion": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["excluded", "reason"],
+      "properties": {
+        "excluded": {"type": "boolean"},
+        "reason": {"type": ["string", "null"]}
+      }
+    }
+  }
+}
