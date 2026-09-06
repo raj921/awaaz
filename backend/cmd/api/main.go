@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -27,13 +28,32 @@ func main() {
 		h.UseSarvam(sarvam.NewClient(cfg.SarvamAPIKey, cfg.UpstreamTimeout))
 	}
 	h.UseMemory(memory.NewClient(cfg.MemoryURL))
-	mux := handler.CORS(handler.Chain(handler.Overload(handler.NewMux(h), 50, 30, 60), cfg.MaxBodyBytes), strings.Split(cfg.CORSOrigins, ",")...)
+
+	origins := splitOrigins(cfg.CORSOrigins)
+	// The WebSocket room enforces the same allowlist itself: browsers do
+	// not apply CORS to WebSocket upgrades.
+	h.AllowOrigins(origins...)
+
+	mux := handler.CORS(
+		handler.Chain(
+			handler.Overload(handler.NewMux(h), cfg.MaxInflight, cfg.RateLimitRPS, cfg.RateLimitBurst),
+			cfg.MaxBodyBytes,
+		),
+		origins...,
+	)
 
 	server := &http.Server{
-		Addr:         cfg.Addr,
-		Handler:      mux,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 10 * time.Minute,
+		Addr:    cfg.Addr,
+		Handler: mux,
+		// ReadHeaderTimeout, not ReadTimeout: a whole-request read deadline
+		// also applies to a hijacked WebSocket, so it used to kill every
+		// voice room a fixed time after it opened. WriteTimeout is off for
+		// the same reason — long voice turns and streamed audio outlive any
+		// fixed write budget, and per-connection deadlines are set by the
+		// handlers that need them.
+		ReadHeaderTimeout: 15 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		ErrorLog:          slog.NewLogLogger(slog.Default().Handler(), slog.LevelWarn),
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -49,9 +69,24 @@ func main() {
 	}()
 
 	slog.Info("listening", "addr", cfg.Addr)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
 	<-done
+	slog.Info("stopped")
+}
+
+// splitOrigins parses the comma-separated CORS_ORIGINS list, dropping the
+// empty entries a trailing comma would otherwise turn into an origin that
+// matches every request with no Origin header.
+func splitOrigins(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

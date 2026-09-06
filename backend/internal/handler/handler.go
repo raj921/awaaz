@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"awaaz/internal/apperror"
 	"awaaz/internal/memory"
@@ -32,12 +34,26 @@ type Handler struct {
 	gateway modelGateway
 	sarvam  modelGateway
 	mem     *memory.Client
+	// allowedOrigins guards WebSocket upgrades. Browsers do not apply CORS
+	// to WebSockets, so the room handler enforces the same allowlist itself.
+	allowedOrigins []string
 }
 
 func New(gateway modelGateway) *Handler {
 	return &Handler{
 		gateway: gateway,
 	}
+}
+
+// AllowOrigins sets the WebSocket origin allowlist (same list as CORS).
+func (h *Handler) AllowOrigins(origins ...string) {
+	cleaned := make([]string, 0, len(origins))
+	for _, o := range origins {
+		if o = strings.TrimSpace(o); o != "" {
+			cleaned = append(cleaned, o)
+		}
+	}
+	h.allowedOrigins = cleaned
 }
 
 // UseSarvam attaches the optional Sarvam provider. Without it, provider
@@ -65,6 +81,9 @@ func NewMux(h *Handler) *http.ServeMux {
 	return mux
 }
 
+// warmTimeout bounds the background warm probes.
+const warmTimeout = 5 * time.Minute
+
 // warm preloads cold GPU containers (whisper, parler) in the background so
 // the first real voice turn skips the 15–50 s model loads. Returns
 // immediately; the loads keep running after the response.
@@ -73,13 +92,24 @@ func (h *Handler) warm(w http.ResponseWriter, r *http.Request) {
 		respondError(w, apperror.NewBadGateway("gateway is not configured"))
 		return
 	}
-	probeCtx, cancel := context.WithCancel(context.WithoutCancel(r.Context()))
-	_ = cancel // probe runs to completion even after the request context ends
+	// The probe outlives the request (the point is to warm containers after
+	// we have answered) but must still be bounded: the previous version
+	// created a cancel func it never called, leaking the context and its
+	// timer for the lifetime of the process on every warm call.
+	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), warmTimeout)
+	var probes sync.WaitGroup
+	probes.Add(2)
 	go func() {
+		defer probes.Done()
 		_, _, _ = h.gateway.Asr(probeCtx, "auto", silentWavProbe, "")
 	}()
 	go func() {
+		defer probes.Done()
 		_, _, _ = h.gateway.Tts(probeCtx, "नमस्ते।")
+	}()
+	go func() {
+		probes.Wait()
+		cancel()
 	}()
 	w.WriteHeader(http.StatusNoContent)
 }
