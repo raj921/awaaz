@@ -19,7 +19,7 @@ import (
 	"net/http"
 	"time"
 
-	"attunebench/internal/apperror"
+	"awaaz/internal/apperror"
 )
 
 const (

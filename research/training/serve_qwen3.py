@@ -50,7 +50,7 @@ UI_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AttuneBench — Hindi/Telugu model</title>
+<title>Awaaz — Hindi/Telugu model</title>
 <style>
  body { font-family: system-ui, sans-serif; background: #0f1220; color: #e8eaf6; margin: 0; display: flex; justify-content: center; }
  .wrap { width: 100%; max-width: 640px; padding: 16px; }
@@ -68,7 +68,7 @@ UI_HTML = """<!doctype html>
 </style>
 </head>
 <body><div class="wrap">
-<h1>AttuneBench — Hindi/Telugu model</h1>
+<h1>Awaaz — Hindi/Telugu model</h1>
 <div class="sub">Bilingual call-style conversational model (Qwen3-1.7B + DoRA adapter). First message may take ~1 min (container warm-up).</div>
 <div id="chat"></div>
 <div class="row"><input id="q" placeholder="Type Hindi or Telugu..." autocomplete="off"><button onclick="send()">Send</button></div>

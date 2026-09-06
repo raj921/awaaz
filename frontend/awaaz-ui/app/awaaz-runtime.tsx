@@ -7,11 +7,11 @@ import {
   type ChatModelAdapter,
 } from "@assistant-ui/react";
 
-export type Provider = "attunebench" | "sarvam";
+export type Provider = "awaaz" | "sarvam";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:18080";
 
-export function AttuneBenchRuntimeProvider({
+export function AwaazRuntimeProvider({
   provider,
   children,
 }: Readonly<{ provider: Provider; children: ReactNode }>) {

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"attunebench/internal/apperror"
+	"awaaz/internal/apperror"
 )
 
 // CORS allows browser frontends to call the API. Origins come from config

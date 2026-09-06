@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"attunebench/internal/modal"
+	"awaaz/internal/modal"
 )
 
 type fakeGateway struct {

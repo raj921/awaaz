@@ -14,9 +14,9 @@ import {
   type VoiceOrbState,
 } from "@/components/assistant-ui/elements/voice";
 import {
-  AttuneBenchRuntimeProvider,
+  AwaazRuntimeProvider,
   type Provider,
-} from "./attunebench-runtime";
+} from "./awaaz-runtime";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:18080";
 
@@ -38,9 +38,9 @@ const MODES: {
   voice: boolean;
   llm?: "sarvam";
 }[] = [
-  { id: "ab-voice-sxl", label: "Voice · Sarvam LLM", group: "AttuneBench", provider: "attunebench", voice: true, llm: "sarvam" },
-  { id: "ab-voice", label: "Voice · Qwen LLM", group: "AttuneBench", provider: "attunebench", voice: true },
-  { id: "ab-chat", label: "Chat", group: "AttuneBench", provider: "attunebench", voice: false },
+  { id: "ab-voice-sxl", label: "Voice · Sarvam LLM", group: "Awaaz", provider: "awaaz", voice: true, llm: "sarvam" },
+  { id: "ab-voice", label: "Voice · Qwen LLM", group: "Awaaz", provider: "awaaz", voice: true },
+  { id: "ab-chat", label: "Chat", group: "Awaaz", provider: "awaaz", voice: false },
   { id: "sarvam-voice", label: "Voice", group: "Sarvam", provider: "sarvam", voice: true },
   { id: "sarvam-chat", label: "Chat", group: "Sarvam", provider: "sarvam", voice: false },
 ];
@@ -459,20 +459,20 @@ export default function Page() {
   );
 
   const chatStage = (
-    <AttuneBenchRuntimeProvider provider={provider}>
+    <AwaazRuntimeProvider provider={provider}>
       <section className="h-[70svh] min-h-0 w-full md:h-full md:flex-1">
         <div className="h-full overflow-hidden rounded-3xl border ab-hairline bg-white/[0.02]">
           <Thread />
         </div>
       </section>
-    </AttuneBenchRuntimeProvider>
+    </AwaazRuntimeProvider>
   );
 
   return (
     <div className="dark flex min-h-svh flex-col bg-[#0c0c0c] font-sans text-white md:h-svh md:overflow-hidden">
       <header className="flex h-12 shrink-0 items-center justify-between border-b ab-hairline px-5">
-        <a href="#" aria-label="AttuneBench home" className="text-sm font-medium tracking-tight">
-          Attune<span className="ab-grad-text">Bench</span>
+        <a href="#" aria-label="Awaaz home" className="text-sm font-medium tracking-tight">
+          A<span className="ab-grad-text">waaz</span>
         </a>
         <ModeMenu mode={mode} setMode={setMode} />
       </header>

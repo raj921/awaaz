@@ -36,7 +36,7 @@ VOICE_UI_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AttuneBench Voice — hi/te</title>
+<title>Awaaz Voice — hi/te</title>
 <style>
  body { font-family: system-ui, sans-serif; background: #0f1220; color: #e8eaf6; margin: 0; display: flex; justify-content: center; }
  .wrap { width: 100%; max-width: 560px; padding: 16px; }
@@ -60,7 +60,7 @@ VOICE_UI_HTML = """<!doctype html>
 </style>
 </head>
 <body><div class="wrap">
-<h1>AttuneBench Voice — Hindi / Telugu</h1>
+<h1>Awaaz Voice — Hindi / Telugu</h1>
 <div class="sub">Speak (or type) — the pipeline transcribes, replies, and speaks. First turn takes ~1-2 min (warm-up), then ~8 s per turn.</div>
 <div class="lang"><button id="hi" class="on" onclick="setLang('hi')">हिंदी</button><button id="te" onclick="setLang('te')">తెలుగు</button></div>
 <button class="mic" id="mic" onclick="toggleMic()">🎤 Tap to speak</button>

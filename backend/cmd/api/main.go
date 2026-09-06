@@ -1,4 +1,4 @@
-// Command api runs the AttuneBench gateway: a thin, stateless Go server in
+// Command api runs the Awaaz gateway: a thin, stateless Go server in
 // front of the Modal GPU workers (chat model + voice pipeline).
 package main
 
@@ -12,11 +12,11 @@ import (
 	"syscall"
 	"time"
 
-	"attunebench/internal/config"
-	"attunebench/internal/handler"
-	"attunebench/internal/memory"
-	"attunebench/internal/modal"
-	"attunebench/internal/sarvam"
+	"awaaz/internal/config"
+	"awaaz/internal/handler"
+	"awaaz/internal/memory"
+	"awaaz/internal/modal"
+	"awaaz/internal/sarvam"
 )
 
 func main() {

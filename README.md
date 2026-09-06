@@ -1,4 +1,4 @@
-# AttuneBench — native Indic emotional-intelligence benchmark + ML demo pipeline
+# Awaaz — native Indic emotional-intelligence benchmark + ML demo pipeline
 
 Native-authored Hindi/Telugu emotion data suite (83,196 processed records, 8 pinned sources)
 with honest baselines, plus a complete cloud ML pipeline demo: **memory system,

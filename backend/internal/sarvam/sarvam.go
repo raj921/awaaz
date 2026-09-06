@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"attunebench/internal/modal"
+	"awaaz/internal/modal"
 )
 
 const chatURL = "https://api.sarvam.ai/v1/chat/completions"

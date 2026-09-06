@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"strings"
 
-	"attunebench/internal/apperror"
-	"attunebench/internal/memory"
-	"attunebench/internal/modal"
+	"awaaz/internal/apperror"
+	"awaaz/internal/memory"
+	"awaaz/internal/modal"
 )
 
 // modelGateway is the slice of the Modal client the handlers need. Defined on
