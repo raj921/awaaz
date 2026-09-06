@@ -7,6 +7,7 @@ import {
   type ChatModelAdapter,
 } from "@assistant-ui/react"
 import { API_URL } from "@/lib/config"
+import type { Fact, RecalledFact } from "@/hooks/use-memory"
 import type { Provider } from "@/lib/modes"
 
 export type { Provider } from "@/lib/modes"
@@ -14,15 +15,35 @@ export type { Provider } from "@/lib/modes"
 /** Matches the gateway's error envelope. */
 type ApiError = { error?: { code?: string; message?: string } }
 
+type ChatResponse = ApiError & {
+  reply?: string
+  memory_used?: RecalledFact[]
+  memory_saved?: Fact[]
+}
+
 export function AwaazRuntimeProvider({
   provider,
+  onMemory,
   children,
-}: Readonly<{ provider: Provider; children: ReactNode }>) {
+}: Readonly<{
+  provider: Provider
+  /** Reports per-turn memory activity so the UI can surface it. */
+  onMemory?: (used: RecalledFact[], saved: Fact[]) => void
+  children: ReactNode
+}>) {
   // Read at run time so switching provider never resets the thread.
   const providerRef = useRef(provider)
   useEffect(() => {
     providerRef.current = provider
   }, [provider])
+
+  // Held in a ref for the same reason as provider: the adapter is memoized
+  // once, so closing over the prop directly would pin the first render's
+  // callback forever.
+  const onMemoryRef = useRef(onMemory)
+  useEffect(() => {
+    onMemoryRef.current = onMemory
+  }, [onMemory])
 
   const runtime = useLocalRuntime(
     useMemo<ChatModelAdapter>(
@@ -53,9 +74,9 @@ export function AwaazRuntimeProvider({
           // A non-JSON body (a proxy's HTML 502 page, say) used to throw a
           // raw SyntaxError at the user. Parse defensively and report the
           // status instead.
-          let data: (ApiError & { reply?: string }) | null = null
+          let data: ChatResponse | null = null
           try {
-            data = (await res.json()) as ApiError & { reply?: string }
+            data = (await res.json()) as ChatResponse
           } catch {
             data = null
           }
@@ -67,6 +88,7 @@ export function AwaazRuntimeProvider({
           if (typeof data?.reply !== "string") {
             throw new Error("The model returned an empty reply.")
           }
+          onMemoryRef.current?.(data.memory_used ?? [], data.memory_saved ?? [])
           return { content: [{ type: "text", text: data.reply }] }
         },
       }),

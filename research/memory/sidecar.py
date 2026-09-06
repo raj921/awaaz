@@ -7,7 +7,8 @@ Endpoints (JSON):
   POST /add     {"text": "..."} -> {"id": N, "text": "..."}
   POST /forget  {"text": "..."} -> {"forgot": true|false}
   GET  /facts                   -> {"facts": [{"id": N, "text": "..."}]}
-  POST /context {"query": "..."} -> {"block": "MEMORY:\\n- ..."} ("" when empty)
+  POST /context {"query": "..."} -> {"block": "MEMORY:\\n- ...", "used": [...]}
+  POST /observe {"text": "..."}  -> {"captured": [{"id": N, "text": "..."}]}
 
 Fixes over the previous version:
   * Persistence was `pickle` — arbitrary code execution on load, and any
@@ -35,6 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from extract import extract_facts  # noqa: E402
 from memory_v2 import Memory, MemoryStore  # noqa: E402
 from store_db import FactDB  # noqa: E402
 
@@ -148,15 +150,72 @@ class DurableStore:
             return self.db.active_facts()
 
     def context_block(self, query: str) -> str:
+        return self.recall(query)["block"]
+
+    def recall(self, query: str, k: int = 3) -> dict:
+        """Build the prompt context block AND report what it drew on.
+
+        The old call returned only an opaque string, so neither the UI nor the
+        logs could tell whether memory had actually influenced a reply — the
+        feature was invisible and therefore untrustworthy. Returning the
+        matched facts alongside the block is what lets the client show
+        "remembered: ..." next to the answer.
+        """
         with self.lock:
-            block = self.store.context_block(query)
+            retrieved = self.store.retrieve(query, k=k)
+            recent = list(self.store.working)[-2:]
+            lines = []
+            if retrieved:
+                lines.append("MEMORY:")
+                lines.extend(f"- {m.text}" for m in retrieved)
+            if recent:
+                lines.append("RECENT:")
+                lines.extend(f"- {u}" for u in recent)
+
+            used = [
+                {
+                    "id": m.id,
+                    "text": m.text,
+                    "importance": round(float(m.importance), 3),
+                    "retrievability": round(self.store.retrievability(m), 3),
+                }
+                for m in retrieved
+            ]
             # retrieve() rehearses, which updates activation traces; persist
             # so recall history survives a restart.
             for m in self.store.memories.values():
                 if m.status == "active" and m.text:
                     self.db.upsert_fact(m)
             self._persist_state()
-            return block
+            return {"block": "\n".join(lines), "used": used}
+
+    def observe(self, utterance: str) -> list[dict]:
+        """Automatic capture from a conversational turn.
+
+        Runs the utterance through the extractor and stores only what looks
+        like an enduring first-person fact. Everything the user says also
+        enters working memory, so "RECENT:" context works even for turns that
+        are not worth storing permanently.
+        """
+        with self.lock:
+            self.store.hear(utterance)
+            captured = []
+            for text in extract_facts(utterance, list(self.store.working)):
+                before = len(self.store.memories)
+                m = self.store.add(text)
+                if m is None:
+                    continue
+                self.db.upsert_fact(m)
+                for other in self.store.memories.values():
+                    if other.superseded_by == m.id:
+                        self.db.upsert_fact(other)
+                # Only report genuinely new facts: re-hearing a known one is
+                # a NOOP rehearsal, and surfacing it as "remembered" every
+                # time would be noise.
+                if len(self.store.memories) > before:
+                    captured.append({"id": m.id, "text": m.text})
+            self._persist_state()
+            return captured
 
     def count(self) -> int:
         with self.lock:
@@ -259,8 +318,14 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(query, str) or not query.strip():
                     # An empty query is a valid no-op, not an error: the
                     # gateway calls this on every turn.
-                    return self._send({"block": ""})
-                return self._send({"block": self.store.context_block(query.strip())})
+                    return self._send({"block": "", "used": []})
+                return self._send(self.store.recall(query.strip()))
+
+            if self.path == "/observe":
+                text = self._text_arg(body)
+                if text is None:
+                    return self._send({"captured": []})
+                return self._send({"captured": self.store.observe(text)})
 
             return self._error(404, "not found")
         except Exception:

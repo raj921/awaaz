@@ -75,12 +75,42 @@ func (c *Client) Facts(ctx context.Context) ([]Fact, error) {
 	return out.Facts, nil
 }
 
-func (c *Client) Context(ctx context.Context, query string) string {
+// Recalled is one fact the store drew on to answer a turn. Surfacing these
+// is what makes memory visible in the UI instead of an invisible prompt
+// mutation the user has to take on faith.
+type Recalled struct {
+	ID             int     `json:"id"`
+	Text           string  `json:"text"`
+	Importance     float64 `json:"importance"`
+	Retrievability float64 `json:"retrievability"`
+}
+
+// Recall returns the prompt context block plus the facts it was built from.
+func (c *Client) Recall(ctx context.Context, query string) (string, []Recalled) {
 	var out struct {
-		Block string `json:"block"`
+		Block string     `json:"block"`
+		Used  []Recalled `json:"used"`
 	}
 	if err := c.post(ctx, "/context", map[string]string{"query": query}, &out); err != nil {
-		return ""
+		return "", nil
 	}
-	return out.Block
+	return out.Block, out.Used
+}
+
+// Context keeps the block-only call for callers that do not surface recall.
+func (c *Client) Context(ctx context.Context, query string) string {
+	block, _ := c.Recall(ctx, query)
+	return block
+}
+
+// Observe offers a conversational turn to the store for automatic capture.
+// Returns only genuinely new facts, so the caller can announce them.
+func (c *Client) Observe(ctx context.Context, text string) []Fact {
+	var out struct {
+		Captured []Fact `json:"captured"`
+	}
+	if err := c.post(ctx, "/observe", map[string]string{"text": text}, &out); err != nil {
+		return nil
+	}
+	return out.Captured
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AUDIO, API_URL, wsURL } from "@/lib/config"
+import type { Fact, RecalledFact } from "@/hooks/use-memory"
 
 export type VoiceState =
   "idle" | "connecting" | "listening" | "thinking" | "speaking"
@@ -9,6 +10,8 @@ export type VoiceState =
 export type VoiceSessionOptions = {
   provider: string
   llm?: string
+  /** Called when a turn wrote new facts, so the panel can refresh. */
+  onMemoryChange?: () => void
 }
 
 export type VoiceSession = {
@@ -17,6 +20,10 @@ export type VoiceSession = {
   room: string | null
   heard: string | null
   reply: string | null
+  /** Facts recalled to answer the latest turn. */
+  memoryUsed: RecalledFact[]
+  /** Facts newly learned from the latest turn. */
+  memorySaved: Fact[]
   error: string | null
   holding: boolean
   start: () => Promise<void>
@@ -29,7 +36,13 @@ export type VoiceSession = {
 type ServerMessage =
   | { type: "room"; id: string }
   | { type: "state"; value: "listening" | "thinking" | "speaking" | "ended" }
-  | { type: "reply"; heard?: string; reply?: string }
+  | {
+      type: "reply"
+      heard?: string
+      reply?: string
+      memory_used?: RecalledFact[]
+      memory_saved?: Fact[]
+    }
   | { type: "error"; message: string }
 
 /**
@@ -55,12 +68,15 @@ type ServerMessage =
 export function useVoiceSession({
   provider,
   llm,
+  onMemoryChange,
 }: VoiceSessionOptions): VoiceSession {
   const [state, setState] = useState<VoiceState>("idle")
   const [volume, setVolume] = useState(0)
   const [room, setRoom] = useState<string | null>(null)
   const [heard, setHeard] = useState<string | null>(null)
   const [reply, setReply] = useState<string | null>(null)
+  const [memoryUsed, setMemoryUsed] = useState<RecalledFact[]>([])
+  const [memorySaved, setMemorySaved] = useState<Fact[]>([])
   const [error, setError] = useState<string | null>(null)
   const [holding, setHolding] = useState(false)
 
@@ -261,6 +277,8 @@ export function useVoiceSession({
     setError(null)
     setHeard(null)
     setReply(null)
+    setMemoryUsed([])
+    setMemorySaved([])
     setState("connecting")
 
     // Warm the GPU containers as the room opens so the first utterance does
@@ -319,10 +337,19 @@ export function useVoiceSession({
           break
         case "state":
           setState(msg.value === "ended" ? "idle" : msg.value)
+          // A new turn invalidates the previous turn's memory badges.
+          if (msg.value === "thinking") {
+            setMemoryUsed([])
+            setMemorySaved([])
+          }
           break
         case "reply":
           if (msg.heard !== undefined) setHeard(msg.heard)
           if (msg.reply !== undefined) setReply(msg.reply)
+          // Replace rather than accumulate: these describe THIS turn.
+          setMemoryUsed(msg.memory_used ?? [])
+          setMemorySaved(msg.memory_saved ?? [])
+          if (msg.memory_saved?.length) onMemoryChange?.()
           break
         case "error":
           setError(msg.message)
@@ -345,7 +372,15 @@ export function useVoiceSession({
       setHolding(false)
       setState("idle")
     }
-  }, [llm, playReply, provider, startMic, stopMic, stopPlayback])
+  }, [
+    llm,
+    onMemoryChange,
+    playReply,
+    provider,
+    startMic,
+    stopMic,
+    stopPlayback,
+  ])
 
   // Push-to-talk. The intent is recorded locally first so the button always
   // responds, even if the socket is still connecting.
@@ -385,6 +420,8 @@ export function useVoiceSession({
     room,
     heard,
     reply,
+    memoryUsed,
+    memorySaved,
     error,
     holding,
     start,

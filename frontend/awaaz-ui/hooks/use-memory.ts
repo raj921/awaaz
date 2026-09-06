@@ -5,6 +5,12 @@ import { API_URL } from "@/lib/config"
 
 export type Fact = { id: number; text: string }
 
+/** A fact the assistant drew on to answer, with its scoring. */
+export type RecalledFact = Fact & {
+  importance: number
+  retrievability: number
+}
+
 /**
  * useMemory talks to the gateway's memory endpoints.
  *
