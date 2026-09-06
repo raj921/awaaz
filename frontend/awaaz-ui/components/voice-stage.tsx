@@ -6,6 +6,7 @@ import {
   type VoiceOrbState,
 } from "@/components/assistant-ui/elements/voice"
 import type { VoiceSession, VoiceState } from "@/hooks/use-voice-session"
+import { RecalledBadges, SavedBadges } from "@/components/memory-badges"
 
 const STATUS_LABEL: Record<VoiceState, string> = {
   idle: "Tap to start",
@@ -37,7 +38,17 @@ function orbState(state: VoiceState): VoiceOrbState {
 }
 
 export function VoiceStage({ session }: { session: VoiceSession }) {
-  const { state, volume, room, heard, reply, error, holding } = session
+  const {
+    state,
+    volume,
+    room,
+    heard,
+    reply,
+    error,
+    holding,
+    memoryUsed,
+    memorySaved,
+  } = session
   const orb = orbState(state)
   const live = state === "listening" || state === "speaking"
   const busy = live || state === "connecting" || state === "thinking"
@@ -96,6 +107,10 @@ export function VoiceStage({ session }: { session: VoiceSession }) {
                 {reply}
               </p>
             )}
+            {/* Why the assistant answered the way it did, and what it took
+                away from the turn — memory made observable. */}
+            <RecalledBadges used={memoryUsed} className="pt-1.5" />
+            <SavedBadges saved={memorySaved} className="pt-0.5" />
           </>
         )}
         {!heard && !reply && state === "idle" && (

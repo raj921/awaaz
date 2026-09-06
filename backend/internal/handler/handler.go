@@ -84,6 +84,11 @@ func NewMux(h *Handler) *http.ServeMux {
 // warmTimeout bounds the background warm probes.
 const warmTimeout = 5 * time.Minute
 
+// memoryTimeout bounds recall and capture. Memory sits on the critical path
+// of every turn, so a wedged sidecar must cost a fraction of a second and
+// then be ignored — never stall speech.
+const memoryTimeout = 2 * time.Second
+
 // warm preloads cold GPU containers (whisper, parler) in the background so
 // the first real voice turn skips the 15–50 s model loads. Returns
 // immediately; the loads keep running after the response.
@@ -189,20 +194,35 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 
 	// Recall: last user turn retrieves memory context, sent as a system
 	// message. Empty block (or sidecar down) leaves the messages untouched.
-	if h.mem != nil && len(messages) > 0 {
-		if block := h.mem.Context(r.Context(), messages[len(messages)-1].Content); block != "" {
-			messages = append([]modal.ChatMessage{{Role: "system", Content: block}}, messages...)
-		}
+	lastUser := messages[len(messages)-1].Content
+	recalled := h.recallFor(r.Context(), lastUser)
+	if recalled.block != "" {
+		messages = append([]modal.ChatMessage{{Role: "system", Content: recalled.block}}, messages...)
 	}
+
+	// Chat learns from conversation exactly like voice does. Without this,
+	// the same sentence typed and spoken produced different memory state.
+	//
+	// Capture runs BEFORE the model call: what the user told us is true
+	// whether or not the GPU answers, and losing a stated fact to an
+	// upstream outage is the one failure a memory system must not have.
+	captured := h.observe(r.Context(), lastUser)
 
 	result, err := gateway.Chat(r.Context(), messages, maxTokens)
 	if err != nil {
 		respondError(w, mapUpstream(err))
 		return
 	}
+
 	out := map[string]any{"reply": result.Reply, "model": model}
 	if result.ServerMs > 0 {
 		out["server_ms"] = result.ServerMs
+	}
+	if len(recalled.used) > 0 {
+		out["memory_used"] = recalled.used
+	}
+	if len(captured) > 0 {
+		out["memory_saved"] = captured
 	}
 	respondJSON(w, http.StatusOK, out)
 }
@@ -328,7 +348,16 @@ func (h *Handler) runVoiceTurn(ctx context.Context, provider, llm, lang, wavB64,
 		}
 		llmGateway, model = h.sarvam, "sarvam-105b-conversations"
 	}
-	chat, err := llmGateway.ChatVoice(ctx, heard, 50)
+
+	// Recall before answering. The voice path previously touched memory not
+	// at all: the chat stage recalled context but a spoken turn never did, so
+	// the assistant forgot your name the moment you talked to it instead of
+	// typing. Same store, same guarantees, both surfaces.
+	recalled := h.recallFor(ctx, heard)
+	// Capture before the LLM for the same reason as chat: a transcribed
+	// fact survives an upstream failure.
+	captured := h.observe(ctx, heard)
+	chat, err := llmGateway.ChatVoice(ctx, withMemory(heard, recalled.block), 50)
 	if err != nil {
 		return nil, mapUpstream(err)
 	}
@@ -351,10 +380,57 @@ func (h *Handler) runVoiceTurn(ctx context.Context, provider, llm, lang, wavB64,
 			out[key] = ms
 		}
 	}
+	if len(recalled.used) > 0 {
+		out["memory_used"] = recalled.used
+	}
+	if len(captured) > 0 {
+		out["memory_saved"] = captured
+	}
 	slog.Info("voice turn", "provider", provider, "llm", model,
 		"heard", heard, "reply", firstLines(chat.Reply, 160),
-		"spoken", firstLines(spoken, 160))
+		"spoken", firstLines(spoken, 160),
+		"recalled", len(recalled.used), "captured", len(captured))
 	return out, nil
+}
+
+// recallResult bundles the prompt block with the facts it came from.
+type recallResult struct {
+	block string
+	used  []memory.Recalled
+}
+
+// recallFor fetches memory context. Memory is best-effort by design: a
+// sidecar that is down or slow must degrade to a normal reply, never fail
+// the turn.
+func (h *Handler) recallFor(ctx context.Context, query string) recallResult {
+	if h.mem == nil || strings.TrimSpace(query) == "" {
+		return recallResult{}
+	}
+	memCtx, cancel := context.WithTimeout(ctx, memoryTimeout)
+	defer cancel()
+	block, used := h.mem.Recall(memCtx, query)
+	return recallResult{block: block, used: used}
+}
+
+// observe offers the user's turn to the store for automatic capture.
+func (h *Handler) observe(ctx context.Context, heard string) []memory.Fact {
+	if h.mem == nil || strings.TrimSpace(heard) == "" {
+		return nil
+	}
+	// Detached from the request context: capture must still complete when
+	// the caller is a WebSocket turn that returns immediately after.
+	obsCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), memoryTimeout)
+	defer cancel()
+	return h.mem.Observe(obsCtx, heard)
+}
+
+// withMemory prepends the recalled context to the spoken prompt. The voice
+// model takes no system role, so the block rides inline.
+func withMemory(heard, block string) string {
+	if block == "" {
+		return heard
+	}
+	return block + "\n\n" + heard
 }
 
 // firstLines truncates observability output — the log shows what was heard
