@@ -1,8 +1,11 @@
+// Package config loads gateway settings from the environment. Every value
 // has a working default so `go run ./cmd/api` just works out of the box.
 package config
 
 import (
+	"log/slog"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -17,6 +20,9 @@ type Config struct {
 	CORSOrigins     string
 	UpstreamTimeout time.Duration
 	MaxBodyBytes    int64
+	MaxInflight     int
+	RateLimitRPS    float64
+	RateLimitBurst  int
 }
 
 func FromEnv() Config {
@@ -30,7 +36,10 @@ func FromEnv() Config {
 		MemoryURL:       envOr("MEMORY_URL", "http://127.0.0.1:18081"),
 		CORSOrigins:     envOr("CORS_ORIGINS", "http://localhost:3000"),
 		UpstreamTimeout: envDuration("UPSTREAM_TIMEOUT", 300*time.Second),
-		MaxBodyBytes:    4 << 20,
+		MaxBodyBytes:    envInt64("MAX_BODY_BYTES", 4<<20),
+		MaxInflight:     envInt("MAX_INFLIGHT", 50),
+		RateLimitRPS:    envFloat("RATE_LIMIT_RPS", 30),
+		RateLimitBurst:  envInt("RATE_LIMIT_BURST", 60),
 	}
 }
 
@@ -41,13 +50,61 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+// envDuration parses a duration, warning loudly on a malformed value rather
+// than silently falling back — a typo'd timeout that quietly reverts to the
+// default is the kind of bug that only shows up under load.
 func envDuration(key string, fallback time.Duration) time.Duration {
 	raw := os.Getenv(key)
 	if raw == "" {
 		return fallback
 	}
-	if parsed, err := time.ParseDuration(raw); err == nil {
-		return parsed
+	parsed, err := time.ParseDuration(raw)
+	if err != nil || parsed <= 0 {
+		slog.Warn("invalid duration in environment, using default",
+			"key", key, "value", raw, "default", fallback)
+		return fallback
 	}
-	return fallback
+	return parsed
+}
+
+func envInt(key string, fallback int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed <= 0 {
+		slog.Warn("invalid integer in environment, using default",
+			"key", key, "value", raw, "default", fallback)
+		return fallback
+	}
+	return parsed
+}
+
+func envInt64(key string, fallback int64) int64 {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || parsed <= 0 {
+		slog.Warn("invalid integer in environment, using default",
+			"key", key, "value", raw, "default", fallback)
+		return fallback
+	}
+	return parsed
+}
+
+func envFloat(key string, fallback float64) float64 {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseFloat(raw, 64)
+	if err != nil || parsed <= 0 {
+		slog.Warn("invalid number in environment, using default",
+			"key", key, "value", raw, "default", fallback)
+		return fallback
+	}
+	return parsed
 }

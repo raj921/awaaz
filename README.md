@@ -73,3 +73,59 @@ think-wrappers. The model answers in **both languages**: `"हलो" → "ह�
 .venv/bin/python research/training/check_serving.py       # SERVE_OK
 .venv/bin/modal app stop qwen3-a1-serve --yes             # stop the meter
 ```
+
+## Running the app locally
+
+Three processes: the memory sidecar (SQLite), the Go gateway, and the Next UI.
+
+```bash
+# 1. memory sidecar  (http://127.0.0.1:18081, data in research/memory/memory.db)
+python3 research/memory/sidecar.py
+
+# 2. gateway         (http://127.0.0.1:8080)
+cd backend && go run ./cmd/api
+
+# 3. UI              (http://localhost:3000)
+cd frontend/awaaz-ui && npm run dev
+```
+
+The UI calls the API on its **own origin** (`/api/v1/...`) and Next proxies
+that to the gateway — see `next.config.ts`. That keeps the browser on one
+origin, so there are no CORS preflights and no cross-origin WebSocket, and it
+works unchanged from a phone on the LAN or a deployed host. Point the client
+straight at a gateway instead by setting `NEXT_PUBLIC_API_URL`; override the
+proxy target with `GATEWAY_URL`.
+
+### Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ADDR` | `:8080` | gateway listen address |
+| `CORS_ORIGINS` | `http://localhost:3000` | comma-separated allowlist; also gates WebSocket upgrades |
+| `MEMORY_URL` | `http://127.0.0.1:18081` | memory sidecar |
+| `UPSTREAM_TIMEOUT` | `300s` | Modal/Sarvam call budget |
+| `MAX_INFLIGHT` / `RATE_LIMIT_RPS` / `RATE_LIMIT_BURST` | `50` / `30` / `60` | load shedding |
+| `SARVAM_API_KEY` | – | enables the Sarvam provider |
+| `MEMORY_DB` | `research/memory/memory.db` | SQLite fact store |
+| `GATEWAY_URL` | `http://127.0.0.1:8080` | what the UI dev proxy targets |
+| `NEXT_PUBLIC_API_URL` | – | bypass the proxy, call a gateway directly |
+
+### Tests
+
+```bash
+cd backend && go test ./...              # incl. a real end-to-end voice-room session
+python3 research/memory/test_sidecar_db.py
+python3 research/memory/run_eval.py      # MEMORY_EVAL_PASS
+python3 research/memory/run_human_eval.py # MEMORY_HUMAN_PASS
+cd frontend/awaaz-ui && npm run typecheck && npm run lint
+```
+
+### The voice protocol
+
+One WebSocket per room, `GET /api/v1/voice/session?provider=&llm=&lang=`.
+
+Client → server: PCM16LE mono 16 kHz **binary** frames, plus JSON control
+frames `{"type":"config"|"hold"|"flush"|"played"|"stop"}`.
+Server → client: JSON `{"type":"room"|"state"|"reply"|"error"}` and the reply
+WAV as a binary frame. The server pings every 20 s so intermediaries do not
+reap an idle room.

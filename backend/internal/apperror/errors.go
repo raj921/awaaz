@@ -59,3 +59,11 @@ func NewTooManyRequests(msg string) *AppError {
 		StatusCode: 429,
 	}
 }
+
+func NewForbidden(msg string) *AppError {
+	return &AppError{
+		Message:    msg,
+		Code:       "FORBIDDEN",
+		StatusCode: 403,
+	}
+}

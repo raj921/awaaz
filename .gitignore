@@ -23,13 +23,22 @@ __pycache__/
 *.py[cod]
 .DS_Store
 
-# Frontend
-frontend/attunebench-ui/node_modules/
-frontend/attunebench-ui/.next/
-frontend/attunebench-ui/out/
+# Frontend (the UI was renamed attunebench-ui -> awaaz-ui; the old ignore
+# patterns still pointed at the old directory, so node_modules/.next under
+# the current path were untracked-but-not-ignored and showed up in every
+# `git status`.)
+frontend/*/node_modules/
+frontend/*/.next/
+frontend/*/out/
+frontend/*/.turbo/
+next-env.d.ts
+*.tsbuildinfo
 
 # Local runtime artifacts (never commit)
 graphify-out/
 research/memory/.memory_snap.pkl
+research/memory/memory.db
+research/memory/memory.db-wal
+research/memory/memory.db-shm
 research/training/endpoint.url
 cost.json
