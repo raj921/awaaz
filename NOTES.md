@@ -574,3 +574,15 @@ Per KuralHub (the current survey of record), the entire hi/te speech-emotion uni
 
 - Backend now honors $PORT (hosts inject it; ADDR still wins). New root Dockerfile: Go build stage + python:3.12-slim runtime, sidecar + gateway via start.sh, no pip step (stdlib-only both sides). No local docker daemon, so the image is unbuilt-tested — first deploy will prove it.
 - Hosting map: Vercel (frontend/awaaz-ui, 2 env vars) + Railway (root Dockerfile, volume on /data, secrets) + Modal unchanged.
+
+## 2026-09-06 — Part 52: Public — Render backend + Vercel frontend live
+
+- Backend: https://awaaz-w56x.onrender.com (free Docker service, Singapore, render.yaml Blueprint; Dockerfile untested locally but built first try on Render). Frontend: https://awaaz-psi.vercel.app.
+- 404 saga, in order: (1) Root Directory was never set — deployed repo root, empty output. (2) Every rebuild finished in ~30 s with zero build output: Framework Preset was "Other". Fixed deterministically with frontend/awaaz-ui/vercel.json (framework+install+build+output pinned in git instead of dashboard state). (3) My commits used a fabricated noreply email and Vercel blocked the deploy — amended to the real `79806602+raj921` noreply form and force-pushed (private repo, only ours).
+- Wiring verified live: CORS preflight from the Vercel origin allowed; public chat 200 via Sarvam. Remaining: Render free has no disk (memory.db resets on restart — accepted); first request after idle pays the free-tier spin-up.
+
+## 2026-09-06 — Part 56: README rewritten human-plain, workflow cruft deleted
+
+- README is now short and in my voice: what it is, how it works, how I built it (hand vs agent), limits, run commands, references at the back. Stale bits fixed along the way (whisper v2 numbers, ~$17 spend, WebSocket rooms documented after deletion).
+- Deleted from the repo: all 9 GATES*.md machine ledgers (evidence lives on in results/*.json + this log), teaching/ interview-prep side material, docs/agents/ skill boilerplate (AGENTS.md trimmed to what is true). Kept ARTICLE.md and JOURNEY.md as my own writing.
+- data/README source list updated to all eight sources. Backend tests + frontend typecheck green after the cleanup.
