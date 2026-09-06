@@ -16,13 +16,18 @@ type ApiError = { error?: { code?: string; message?: string } }
 
 export function AwaazRuntimeProvider({
   provider,
+  onTurn,
   children,
-}: Readonly<{ provider: Provider; children: ReactNode }>) {
+}: Readonly<{ provider: Provider; onTurn?: () => void; children: ReactNode }>) {
   // Read at run time so switching provider never resets the thread.
   const providerRef = useRef(provider)
   useEffect(() => {
     providerRef.current = provider
   }, [provider])
+  const onTurnRef = useRef(onTurn)
+  useEffect(() => {
+    onTurnRef.current = onTurn
+  }, [onTurn])
 
   const runtime = useLocalRuntime(
     useMemo<ChatModelAdapter>(
@@ -67,6 +72,8 @@ export function AwaazRuntimeProvider({
           if (typeof data?.reply !== "string") {
             throw new Error("The model returned an empty reply.")
           }
+          // Server-side auto-capture ran with this turn; settle the panel.
+          onTurnRef.current?.()
           return { content: [{ type: "text", text: data.reply }] }
         },
       }),

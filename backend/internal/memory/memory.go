@@ -84,3 +84,16 @@ func (c *Client) Context(ctx context.Context, query string) string {
 	}
 	return out.Block
 }
+
+// Observe feeds one user utterance to automatic capture (rules sync, LLM
+// enrichment queued). Callers fire-and-forget it: capture must never slow
+// a reply.
+func (c *Client) Observe(ctx context.Context, utterance string) ([]Fact, error) {
+	var out struct {
+		Captured []Fact `json:"captured"`
+	}
+	if err := c.post(ctx, "/observe", map[string]string{"utterance": utterance}, &out); err != nil {
+		return nil, err
+	}
+	return out.Captured, nil
+}

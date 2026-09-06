@@ -200,6 +200,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		respondError(w, mapUpstream(err))
 		return
 	}
+	h.observeAsync(r.Context(), lastUserText(messages))
 	out := map[string]any{"reply": result.Reply, "model": model}
 	if result.ServerMs > 0 {
 		out["server_ms"] = result.ServerMs
@@ -312,6 +313,7 @@ func (h *Handler) runVoiceTurn(ctx context.Context, provider, llm, lang, wavB64,
 		if err != nil {
 			return nil, mapUpstream(err)
 		}
+		h.observeAsync(ctx, result.Heard)
 		return map[string]any{
 			"heard": result.Heard, "reply": result.Reply,
 			"asr": "saaras:v4", "audio_b64": result.AudioB64,
@@ -354,7 +356,28 @@ func (h *Handler) runVoiceTurn(ctx context.Context, provider, llm, lang, wavB64,
 	slog.Info("voice turn", "provider", provider, "llm", model,
 		"heard", heard, "reply", firstLines(chat.Reply, 160),
 		"spoken", firstLines(spoken, 160))
+	h.observeAsync(ctx, heard)
 	return out, nil
+}
+
+// lastUserText returns the most recent user message, the text worth
+// remembering out of a full history dump.
+func lastUserText(messages []modal.ChatMessage) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			return messages[i].Content
+		}
+	}
+	return ""
+}
+
+// observeAsync feeds one user utterance to memory capture without ever
+// blocking the reply: rules run sync in the sidecar, LLM enrichment queues.
+func (h *Handler) observeAsync(ctx context.Context, text string) {
+	if h.mem == nil || text == "" {
+		return
+	}
+	go h.mem.Observe(context.WithoutCancel(ctx), text)
 }
 
 // firstLines truncates observability output — the log shows what was heard

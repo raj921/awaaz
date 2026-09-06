@@ -3,11 +3,12 @@
 Single-user demo store ("local"); durable via SQLite (see store_db.py).
 
 Endpoints (JSON):
-  GET  /healthz                 -> {"status": "ok", "facts": N}
+  GET  /healthz                 -> {"status": "ok", "facts": N, "llm_enrichment": bool}
   POST /add     {"text": "..."} -> {"id": N, "text": "..."}
   POST /forget  {"text": "..."} -> {"forgot": true|false}
   GET  /facts                   -> {"facts": [{"id": N, "text": "..."}]}
   POST /context {"query": "..."} -> {"block": "MEMORY:\\n- ..."} ("" when empty)
+  POST /observe {"utterance": "..."} -> {"captured": [{...}]} (rules sync, LLM async)
 
 Fixes over the previous version:
   * Persistence was `pickle` — arbitrary code execution on load, and any
@@ -27,6 +28,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import queue
 import signal
 import sys
 import threading
@@ -37,6 +39,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from memory_v2 import Memory, MemoryStore  # noqa: E402
 from store_db import FactDB  # noqa: E402
+from extract import extract_facts  # noqa: E402
+from llm_extract import enabled as llm_enabled  # noqa: E402
+from llm_extract import extract_facts_llm  # noqa: E402
 
 HOST = os.environ.get("MEMORY_HOST", "127.0.0.1")
 PORT = int(os.environ.get("MEMORY_PORT", "18081"))
@@ -45,6 +50,50 @@ MAX_BODY_BYTES = 1 << 20  # 1 MiB: a "fact" is a sentence, not a file
 MAX_TEXT_CHARS = 4000
 
 log = logging.getLogger("memory-sidecar")
+
+
+class Enricher:
+    """Background worker running the LLM extractor off the request path.
+
+    One thread and a bounded queue. When the queue is full the turn is
+    dropped rather than queued: enrichment is a best-effort bonus, and an
+    unbounded backlog would turn a slow LLM into unbounded memory growth and
+    facts landing minutes after they were said.
+    """
+
+    MAX_PENDING = 32
+
+    def __init__(self, store: "DurableStore"):
+        self.store = store
+        self.queue: queue.Queue = queue.Queue(maxsize=self.MAX_PENDING)
+        self.dropped = 0
+        self._thread = threading.Thread(
+            target=self._run, name="memory-enricher", daemon=True
+        )
+        self._thread.start()
+
+    def submit(
+        self, utterance: str, context: str, known: set[str], raw_ids: list[int]
+    ) -> bool:
+        try:
+            self.queue.put_nowait((utterance, context, known, raw_ids))
+            return True
+        except queue.Full:
+            self.dropped += 1
+            log.warning("enrichment queue full, dropped turn (%d total)", self.dropped)
+            return False
+
+    def _run(self) -> None:
+        while True:
+            utterance, context, known, raw_ids = self.queue.get()
+            try:
+                self.store.enrich(utterance, context, known, raw_ids)
+            except Exception:
+                # A crashed worker would silently disable enrichment for the
+                # process lifetime; log and keep serving.
+                log.exception("enrichment worker error")
+            finally:
+                self.queue.task_done()
 
 
 class DurableStore:
@@ -60,6 +109,7 @@ class DurableStore:
         self.db = db
         self.lock = threading.RLock()
         self.store = MemoryStore()
+        self.enricher: Enricher | None = None
         self._restore()
 
     def _restore(self) -> None:
@@ -117,6 +167,91 @@ class DurableStore:
                         self.db.upsert_fact(other)
             self._persist_state()
             return m
+
+    def _store_fact(self, text: str, source: str | None = None) -> dict | None:
+        """Add one fact and persist it. Caller holds the lock.
+
+        Returns the fact only when it is genuinely new — re-hearing a known
+        one is a NOOP rehearsal, and reporting it as "learned" every time
+        would be noise.
+        """
+        before = len(self.store.memories)
+        m = self.store.add(text, source=source)
+        if m is None:
+            return None
+        self.db.upsert_fact(m)
+        for other in self.store.memories.values():
+            if other.superseded_by == m.id:
+                self.db.upsert_fact(other)
+        if len(self.store.memories) <= before:
+            return None
+        return {"id": m.id, "text": m.text}
+
+    def observe(self, utterance: str) -> list[dict]:
+        """Automatic capture from a conversational turn.
+
+        Runs the utterance through the rule extractor and stores only what
+        looks like an enduring first-person fact. Everything the user says
+        also enters working memory, so "RECENT:" context works even for turns
+        that are not worth storing permanently.
+
+        When an LLM extractor is configured, the turn is additionally queued
+        for background enrichment. The rules answer now; the LLM catches what
+        they missed a moment later. Nothing waits on the network.
+        """
+        with self.lock:
+            self.store.hear(utterance)
+            context = "\n".join(list(self.store.working)[-4:-1])
+            captured = []
+            for text in extract_facts(utterance, list(self.store.working)):
+                fact = self._store_fact(text, source="rules")
+                if fact:
+                    captured.append(fact)
+            self._persist_state()
+
+        if self.enricher is not None:
+            already = {m.text for m in self.store.memories.values() if m.text}
+            # Ids the rules stored verbatim from THIS utterance. If the LLM
+            # produces a cleaner rendering of the same turn, these are
+            # superseded rather than left alongside it as near-duplicates.
+            raw_ids = [f["id"] for f in captured]
+            self.enricher.submit(utterance, context, already, raw_ids)
+        return captured
+
+    def enrich(
+        self,
+        utterance: str,
+        context: str,
+        known: set[str],
+        raw_ids: list[int] | None = None,
+    ) -> list[dict]:
+        """Second-pass LLM capture. Runs on the worker thread, never a turn."""
+        facts = extract_facts_llm(utterance, context, known)
+        if not facts:
+            return []
+        with self.lock:
+            stored = [f for f in (self._store_fact(t, source="llm") for t in facts) if f]
+            # The rules store the utterance verbatim ("yeah I have been at the
+            # hospital fifteen years now"); the LLM rewrites it into a clean
+            # fact. Keeping both leaves two entries saying the same thing, and
+            # the raw one is the worse of the two. Supersede it — a soft,
+            # bi-temporal invalidation, so history stays queryable with as_of.
+            if stored and raw_ids:
+                by = self.store.memories.get(stored[0]["id"])
+                for raw_id in raw_ids:
+                    raw = self.store.memories.get(raw_id)
+                    if raw is None or raw.status != "active":
+                        continue
+                    if raw.text.casefold() != utterance.strip().casefold():
+                        continue  # rules found a real fact, not the raw turn
+                    self.store._invalidate(raw, by=by)
+                    self.db.upsert_fact(raw)
+                    log.info("superseded raw capture %d with refined fact", raw_id)
+            self._persist_state()
+        if stored:
+            log.info("llm enrichment stored %d fact(s): %s",
+                     len(stored), [f["text"] for f in stored])
+        return stored
 
     def forget(self, text: str) -> bool:
         with self.lock:
@@ -223,7 +358,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         try:
             if self.path == "/healthz":
-                return self._send({"status": "ok", "facts": self.store.count()})
+                return self._send({
+                    "status": "ok",
+                    "facts": self.store.count(),
+                    "llm_enrichment": self.store.enricher is not None,
+                })
             if self.path == "/facts":
                 return self._send({"facts": self.store.facts()})
             return self._error(404, "not found")
@@ -262,6 +401,19 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send({"block": ""})
                 return self._send({"block": self.store.context_block(query.strip())})
 
+            if self.path == "/observe":
+                # Automatic per-turn capture (rules sync, LLM in background).
+                # Fire-and-forget from the gateway: the reply never waits.
+                # NOTE: reads "utterance", not "text" — _text_arg serves the
+                # /add and /forget routes and would 422 every observe call.
+                utterance = body.get("utterance")
+                if not isinstance(utterance, str):
+                    return self._error(422, "utterance must be a non-empty string")
+                utterance = utterance.strip()
+                if not utterance or len(utterance) > MAX_TEXT_CHARS:
+                    return self._error(422, "utterance must be a non-empty string")
+                return self._send({"captured": self.store.observe(utterance)})
+
             return self._error(404, "not found")
         except Exception:
             log.exception("POST %s failed", self.path)
@@ -278,6 +430,15 @@ def main() -> None:
     )
     db = FactDB(DB_PATH)
     store = DurableStore(db)
+
+    # LLM enrichment is opt-in: without MEMORY_LLM_URL/KEY the sidecar runs
+    # rules-only and behaves exactly as before.
+    if llm_enabled():
+        store.enricher = Enricher(store)
+        log.info("llm enrichment enabled (model=%s)", os.environ.get(
+            "MEMORY_LLM_MODEL", "sarvam-105b-conversations"))
+    else:
+        log.info("llm enrichment disabled (set MEMORY_LLM_URL and MEMORY_LLM_KEY)")
 
     # ThreadingHTTPServer: the single-threaded version serialized every
     # request, so one slow /context call stalled all chat traffic behind it.

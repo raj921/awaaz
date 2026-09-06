@@ -20,12 +20,16 @@ export function useMemory() {
   const [pending, setPending] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const mountedRef = useRef(true)
+  const pendingTimers = useRef<ReturnType<typeof setTimeout>[]>([])
 
   useEffect(() => {
     mountedRef.current = true
+    const timers = pendingTimers.current
     return () => {
       mountedRef.current = false
       abortRef.current?.abort()
+      timers.forEach(clearTimeout)
+      timers.length = 0
     }
   }, [])
 
@@ -92,5 +96,24 @@ export function useMemory() {
     [mutate]
   )
 
-  return { facts, error, pending, remember, forget, refresh }
+  /**
+   * Refresh now, then again shortly after.
+   *
+   * Rule-based capture is synchronous, but LLM enrichment lands a second or
+   * two later on a background worker. A single immediate refresh therefore
+   * shows the raw capture and misses the refined one, leaving the panel
+   * stale until the next unrelated render. The follow-ups are bounded and
+   * cancelled on unmount — this is a settle, not a poll loop.
+   */
+  const refreshSoon = useCallback(() => {
+    void refresh()
+    const timers = [900, 2500].map((ms) =>
+      setTimeout(() => {
+        if (mountedRef.current) void refresh()
+      }, ms)
+    )
+    pendingTimers.current.push(...timers)
+  }, [refresh])
+
+  return { facts, error, pending, remember, forget, refresh, refreshSoon }
 }

@@ -9,6 +9,8 @@ export type VoiceState =
 export type VoiceSessionOptions = {
   provider: string
   llm?: string
+  /** Called after each completed turn (reply received). */
+  onTurn?: () => void
 }
 
 export type VoiceSession = {
@@ -55,6 +57,7 @@ type ServerMessage =
 export function useVoiceSession({
   provider,
   llm,
+  onTurn,
 }: VoiceSessionOptions): VoiceSession {
   const [state, setState] = useState<VoiceState>("idle")
   const [volume, setVolume] = useState(0)
@@ -74,6 +77,11 @@ export function useVoiceSession({
   // Buffer hold intent so a press during the handshake is not lost: the
   // flag is read when the socket opens rather than dropped on the floor.
   const holdRef = useRef(false)
+  // Latest turn callback without re-subscribing the socket handlers.
+  const onTurnRef = useRef(onTurn)
+  useEffect(() => {
+    onTurnRef.current = onTurn
+  }, [onTurn])
   // Guards against a stale async start() resolving after stop().
   const sessionRef = useRef(0)
 
@@ -322,7 +330,13 @@ export function useVoiceSession({
           break
         case "reply":
           if (msg.heard !== undefined) setHeard(msg.heard)
-          if (msg.reply !== undefined) setReply(msg.reply)
+          if (msg.reply !== undefined) {
+            setReply(msg.reply)
+            // The gateway auto-captures the turn server-side (rules now,
+            // LLM enrichment a beat later); settle the memory panel to
+            // catch the refined fact.
+            onTurnRef.current?.()
+          }
           break
         case "error":
           setError(msg.message)

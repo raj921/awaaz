@@ -16,8 +16,8 @@ export default function Page() {
   const [factInput, setFactInput] = useState("")
 
   const { provider, voice, llm } = modeInfo(mode)
-  const session = useVoiceSession({ provider, llm })
   const memory = useMemory()
+  const session = useVoiceSession({ provider, llm, onTurn: memory.refreshSoon })
 
   const warmedRef = useRef(false)
   useEffect(() => {
@@ -61,7 +61,7 @@ export default function Page() {
         {voice ? (
           <VoiceStage session={session} />
         ) : (
-          <AwaazRuntimeProvider provider={provider}>
+          <AwaazRuntimeProvider provider={provider} onTurn={memory.refreshSoon}>
             <section className="h-[70svh] min-h-0 w-full md:h-full md:flex-1">
               <div className="ab-hairline h-full overflow-hidden rounded-3xl border bg-white/[0.02]">
                 <Thread />
