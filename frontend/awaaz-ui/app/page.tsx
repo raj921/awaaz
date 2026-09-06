@@ -28,13 +28,13 @@ export default function Page() {
     void fetch(`${API_URL}/api/v1/warm`, { method: "POST" }).catch(() => {})
   }, [voice])
 
-  // Leaving the voice stage must close the room; otherwise the microphone
+  // Leaving the voice stage must stop the mic; otherwise the microphone
   // stayed open in the background while the user was in chat.
-  const inRoom = session.room !== null
+  const active = session.state !== "idle"
   const stopSession = session.stop
   useEffect(() => {
-    if (!voice && inRoom) stopSession()
-  }, [voice, inRoom, stopSession])
+    if (!voice && active) stopSession()
+  }, [voice, active, stopSession])
 
   async function saveFact() {
     const text = factInput.trim()

@@ -49,12 +49,11 @@ func (f *fakeGateway) Asr(
 	return text, 1, f.asrErr
 }
 
-// Tts returns real base64 (a tiny valid WAV) so callers that decode the
-// audio — the WebSocket room does — exercise the same path production takes.
+// Tts returns fake base64 so the response shape matches production.
 func (f *fakeGateway) Tts(
 	_ context.Context, text string,
 ) (string, float64, error) {
-	return buildWav(make([]byte, 3200)), 1, nil
+	return base64.StdEncoding.EncodeToString([]byte("audio:" + text)), 1, nil
 }
 
 func TestHealth(t *testing.T) {

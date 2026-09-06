@@ -7,7 +7,7 @@ import type { NextConfig } from "next";
  * `localhost` URL baked into the client bundle that breaks on every host
  * except the developer's own machine.
  */
-const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://127.0.0.1:8080";
+const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://127.0.0.1:18080";
 
 const nextConfig: NextConfig = {
   async rewrites() {

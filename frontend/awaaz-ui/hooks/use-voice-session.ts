@@ -1,10 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { AUDIO, API_URL, wsURL } from "@/lib/config"
+import { AUDIO, API_URL } from "@/lib/config"
 
-export type VoiceState =
-  "idle" | "connecting" | "listening" | "thinking" | "speaking"
+export type VoiceState = "idle" | "recording" | "thinking" | "speaking"
 
 export type VoiceSessionOptions = {
   provider: string
@@ -16,43 +15,66 @@ export type VoiceSessionOptions = {
 export type VoiceSession = {
   state: VoiceState
   volume: number
-  room: string | null
   heard: string | null
   reply: string | null
   error: string | null
-  holding: boolean
   start: () => Promise<void>
   stop: () => void
   holdStart: () => void
   holdEnd: () => void
 }
 
-/** Server → client messages on the voice socket. */
-type ServerMessage =
-  | { type: "room"; id: string }
-  | { type: "state"; value: "listening" | "thinking" | "speaking" | "ended" }
-  | { type: "reply"; heard?: string; reply?: string }
-  | { type: "error"; message: string }
+// MediaRecorder gives compressed audio; both upstreams want 16 kHz mono WAV.
+async function toWav16k(blob: Blob): Promise<string> {
+  const ctx = new AudioContext()
+  try {
+    const buf = await ctx.decodeAudioData(await blob.arrayBuffer())
+    const src = buf.getChannelData(0)
+    const out = new Int16Array(
+      Math.floor((src.length * AUDIO.sampleRate) / buf.sampleRate),
+    )
+    for (let i = 0; i < out.length; i++) {
+      const s = src[Math.floor((i * buf.sampleRate) / AUDIO.sampleRate)]
+      out[i] = Math.max(-32768, Math.min(32767, Math.round(s * 32768)))
+    }
+    const wav = new ArrayBuffer(44 + out.length * 2)
+    const v = new DataView(wav)
+    const wstr = (o: number, s: string) => {
+      for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i))
+    }
+    wstr(0, "RIFF")
+    v.setUint32(4, 36 + out.length * 2, true)
+    wstr(8, "WAVEfmt ")
+    v.setUint32(16, 16, true)
+    v.setUint16(20, 1, true)
+    v.setUint16(22, 1, true)
+    v.setUint32(24, AUDIO.sampleRate, true)
+    v.setUint32(28, AUDIO.sampleRate * 2, true)
+    v.setUint16(32, 2, true)
+    v.setUint16(34, 16, true)
+    wstr(36, "data")
+    v.setUint32(40, out.length * 2, true)
+    new Int16Array(wav, 44).set(out)
+    const bytes = new Uint8Array(wav)
+    let bin = ""
+    for (let i = 0; i < bytes.length; i += 8192) {
+      bin += String.fromCharCode(...bytes.subarray(i, i + 8192))
+    }
+    return btoa(bin)
+  } finally {
+    void ctx.close()
+  }
+}
 
 /**
- * useVoiceSession owns the entire voice room lifecycle: socket, microphone,
- * capture graph and reply playback.
+ * useVoiceSession owns one recording turn: mic → MediaRecorder → WAV →
+ * POST /api/v1/voice → play the reply. Plain HTTP, no socket — the room
+ * architecture is gone by user decision.
  *
- * This used to live inline in the page component, where several bugs hid:
- *
- *  - The mic was opened AFTER `ws.onopen` had already fired, and the capture
- *    node was wired up asynchronously. Between "connected" and "mic ready"
- *    the room was live but silent — the socket connected and nothing ever
- *    listened.
- *  - `holdStart` only set `holding` when the socket happened to be OPEN, so
- *    pressing the button during the connect handshake did nothing at all and
- *    the matching `holdEnd` then bailed out early on `if (!holding) return`.
- *    The button looked dead.
- *  - The resampler read `inp[Math.floor(i * ctx.sampleRate / 16000)]` with no
- *    bounds check and no anti-aliasing, emitting `undefined` → NaN → 0
- *    samples at the tail of every block.
- *  - Playback used a bare `new Audio()` with no gate, so overlapping replies
- *    stacked on top of each other.
+ * Push-to-talk: the button is hold-to-talk only. There is no VAD: the turn
+ * ends exactly when the button releases (pointer up, or the 30 s cap). A
+ * mid-thought pause can never cut the sentence, which was the room's
+ * unsolvable failure mode.
  */
 export function useVoiceSession({
   provider,
@@ -61,349 +83,183 @@ export function useVoiceSession({
 }: VoiceSessionOptions): VoiceSession {
   const [state, setState] = useState<VoiceState>("idle")
   const [volume, setVolume] = useState(0)
-  const [room, setRoom] = useState<string | null>(null)
   const [heard, setHeard] = useState<string | null>(null)
   const [reply, setReply] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [holding, setHolding] = useState(false)
 
-  const wsRef = useRef<WebSocket | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const recRef = useRef<MediaRecorder | null>(null)
   const ctxRef = useRef<AudioContext | null>(null)
-  const processorRef = useRef<ScriptProcessorNode | null>(null)
   const rafRef = useRef<number | null>(null)
+  const timeoutRef = useRef<number | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const objectURLRef = useRef<string | null>(null)
-  // Buffer hold intent so a press during the handshake is not lost: the
-  // flag is read when the socket opens rather than dropped on the floor.
-  const holdRef = useRef(false)
-  // Latest turn callback without re-subscribing the socket handlers.
   const onTurnRef = useRef(onTurn)
+  const stateRef = useRef<VoiceState>("idle")
   useEffect(() => {
-    onTurnRef.current = onTurn
-  }, [onTurn])
-  // Guards against a stale async start() resolving after stop().
-  const sessionRef = useRef(0)
+    stateRef.current = state
+  }, [state])
 
-  /** Send a JSON control frame if the socket is open. */
-  const sendControl = useCallback((msg: Record<string, unknown>) => {
-    const ws = wsRef.current
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(msg))
-      return true
-    }
-    return false
-  }, [])
-
-  /** Tear down the microphone graph. Safe to call repeatedly. */
-  const stopMic = useCallback(() => {
+  const stopMeter = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current)
       rafRef.current = null
     }
-    // Disconnect the processor before closing the context, otherwise its
-    // onaudioprocess can fire once more against a closing context.
-    const proc = processorRef.current
-    if (proc) {
-      proc.onaudioprocess = null
-      proc.disconnect()
-      processorRef.current = null
-    }
-    streamRef.current?.getTracks().forEach((t) => t.stop())
-    streamRef.current = null
-    const ctx = ctxRef.current
-    ctxRef.current = null
-    if (ctx && ctx.state !== "closed") void ctx.close().catch(() => {})
     setVolume(0)
   }, [])
 
-  /** Stop any reply currently playing and release its blob URL. */
-  const stopPlayback = useCallback(() => {
-    const audio = audioRef.current
-    if (audio) {
-      audio.onended = null
-      audio.onerror = null
-      audio.pause()
-      audioRef.current = null
+  const stopMic = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+    void ctxRef.current?.close().catch(() => {})
+    ctxRef.current = null
+    stopMeter()
+  }, [stopMeter])
+
+  const stopRecording = useCallback(() => {
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
     }
-    if (objectURLRef.current) {
-      URL.revokeObjectURL(objectURLRef.current)
-      objectURLRef.current = null
-    }
+    recRef.current?.stop()
   }, [])
 
-  const stop = useCallback(() => {
-    sessionRef.current += 1
-    holdRef.current = false
-    const ws = wsRef.current
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      // Ask for a clean server-side close so the room is logged as ended
-      // rather than as a dropped connection.
-      ws.send(JSON.stringify({ type: "stop" }))
-    }
-    ws?.close(1000, "client ended session")
-    wsRef.current = null
-    stopPlayback()
-    stopMic()
-    setRoom(null)
-    setHolding(false)
-    setState("idle")
-  }, [stopMic, stopPlayback])
-
-  /** Play one reply clip, telling the server when playback finishes so the
-   *  server-side echo guard is released early. */
-  const playReply = useCallback(
-    (data: ArrayBuffer) => {
-      stopPlayback() // never stack replies on top of each other
-      const url = URL.createObjectURL(new Blob([data], { type: "audio/wav" }))
-      objectURLRef.current = url
-      const audio = new Audio(url)
-      audioRef.current = audio
-
-      const done = () => {
-        if (objectURLRef.current === url) {
+  const sendVoice = useCallback(
+    async (blob: Blob) => {
+      if (blob.size === 0) {
+        setState("idle")
+        return
+      }
+      setState("thinking")
+      try {
+        const wavB64 = await toWav16k(blob)
+        const res = await fetch(`${API_URL}/api/v1/voice`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lang: "auto",
+            wav_b64: wavB64,
+            provider,
+            ...(llm && { llm }),
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok)
+          throw new Error(data?.error?.message ?? `Request failed (${res.status})`)
+        setHeard(data.heard)
+        setReply(data.reply)
+        setState("speaking")
+        onTurnRef.current?.()
+        const url = URL.createObjectURL(
+          new Blob([Uint8Array.from(atob(data.audio_b64), (c) => c.charCodeAt(0))], {
+            type: "audio/wav",
+          }),
+        )
+        const audio = new Audio(url)
+        audioRef.current = audio
+        const finish = () => {
           URL.revokeObjectURL(url)
-          objectURLRef.current = null
+          audioRef.current = null
+          setState("idle")
         }
-        if (audioRef.current === audio) audioRef.current = null
-        sendControl({ type: "played" })
+        audio.onended = finish
+        audio.onerror = finish
+        await audio.play().catch(() => {
+          setError("could not play reply")
+          finish()
+        })
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "voice request failed")
+        setState("idle")
+      } finally {
+        stopMic()
       }
-      audio.onended = done
-      audio.onerror = () => {
-        setError("could not play the reply audio")
-        done()
-      }
-      void audio.play().catch(() => {
-        // Autoplay policies block playback until the user has interacted;
-        // the turn still succeeded, so surface it without killing the room.
-        setError("tap once to allow audio playback")
-        done()
-      })
     },
-    [sendControl, stopPlayback]
+    [provider, llm, stopMic],
   )
 
-  /**
-   * Open the microphone and build the capture graph. Resolves only once
-   * audio is actually flowing, so the caller can guarantee the room is
-   * listening before it reports "connected".
-   */
-  const startMic = useCallback(async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    })
-    streamRef.current = stream
-
-    // Ask for the target rate directly: when the device supports it the
-    // browser resamples natively and our own resampling becomes a no-op.
-    const ctx = new AudioContext({ sampleRate: AUDIO.sampleRate })
-    ctxRef.current = ctx
-    // Contexts start suspended under autoplay policies; without this the
-    // processor never fires and the room hears pure silence.
-    if (ctx.state === "suspended") await ctx.resume()
-
-    const src = ctx.createMediaStreamSource(stream)
-
-    const analyser = ctx.createAnalyser()
-    analyser.fftSize = 256
-    src.connect(analyser)
-    const samples = new Uint8Array(analyser.frequencyBinCount)
-    const tick = () => {
-      if (!ctxRef.current) return
-      analyser.getByteTimeDomainData(samples)
-      let peak = 0
-      for (const x of samples) peak = Math.max(peak, Math.abs(x - 128) / 128)
-      setVolume(Math.min(1, peak * 2))
-      rafRef.current = requestAnimationFrame(tick)
-    }
-    rafRef.current = requestAnimationFrame(tick)
-
-    // ponytail: ScriptProcessorNode is deprecated but universally available;
-    // move to an AudioWorklet when a second in-browser processor exists.
-    const proc = ctx.createScriptProcessor(AUDIO.frameSize, 1, 1)
-    processorRef.current = proc
-    const ratio = ctx.sampleRate / AUDIO.sampleRate
-    proc.onaudioprocess = (e) => {
-      const ws = wsRef.current
-      if (ws?.readyState !== WebSocket.OPEN) return
-      const input = e.inputBuffer.getChannelData(0)
-      const outLength = Math.floor(input.length / ratio)
-      if (outLength <= 0) return
-      const out = new Int16Array(outLength)
-      for (let i = 0; i < outLength; i++) {
-        // Average the source window instead of point-sampling: a plain
-        // nearest-neighbour pick aliases badly at 48k→16k and made speech
-        // noticeably harder for the ASR stage to read.
-        const start = Math.floor(i * ratio)
-        const end = Math.min(input.length, Math.floor((i + 1) * ratio))
-        let sum = 0
-        let count = 0
-        for (let j = start; j < end; j++) {
-          sum += input[j] ?? 0
-          count++
-        }
-        const sample = count > 0 ? sum / count : 0
-        // Clamp to the int16 range before rounding; the old code could emit
-        // 32768, which wraps to -32768 and clicks.
-        out[i] = Math.max(-32768, Math.min(32767, Math.round(sample * 32767)))
-      }
-      ws.send(out.buffer)
-    }
-    src.connect(proc)
-    // Silent sink keeps the processor pulling without echoing the mic to
-    // the speakers.
-    const sink = ctx.createGain()
-    sink.gain.value = 0
-    proc.connect(sink)
-    sink.connect(ctx.destination)
-  }, [])
-
+  /** Hold to talk: opens the mic and records until holdEnd (button release). */
   const start = useCallback(async () => {
-    if (wsRef.current) return // already in a room
-    const session = ++sessionRef.current
+    if (stateRef.current !== "idle") return
     setError(null)
     setHeard(null)
     setReply(null)
-    setState("connecting")
-
-    // Warm the GPU containers as the room opens so the first utterance does
-    // not pay the cold-start cost.
-    void fetch(`${API_URL}/api/v1/warm`, { method: "POST" }).catch(() => {})
-
-    // Open the microphone FIRST. Previously the socket connected and the
-    // server started its listening window while getUserMedia was still
-    // showing a permission prompt — the room was live but deaf, which is
-    // exactly the "connects but never listens" symptom.
     try {
-      await startMic()
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+      const ctx = new AudioContext()
+      ctxRef.current = ctx
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 256
+      ctx.createMediaStreamSource(stream).connect(analyser)
+      const data = new Uint8Array(analyser.frequencyBinCount)
+      const tick = () => {
+        if (!ctxRef.current) return
+        analyser.getByteTimeDomainData(data)
+        let peak = 0
+        for (const x of data) peak = Math.max(peak, Math.abs(x - 128) / 128)
+        setVolume(Math.min(1, peak * 2))
+        rafRef.current = requestAnimationFrame(tick)
+      }
+      tick()
+
+      const rec = new MediaRecorder(stream)
+      // Guard the browser's stop-flush: some builds deliver a final
+      // dataavailable only on the next tick, so a fast release could
+      // otherwise record an empty clip and surface "Unable to decode".
+      const chunks: Blob[] = []
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data)
+      }
+      rec.onstop = () => {
+        recRef.current = null
+        const blob = new Blob(chunks)
+        if (blob.size === 0) {
+          setState("idle")
+          setError("no speech captured — hold a little longer")
+          stopMic()
+          return
+        }
+        void sendVoice(blob)
+      }
+      recRef.current = rec
+      rec.start()
+      setState("recording")
+      // Cap stays: whisper likes clips under 30 s and the gateway caps
+      // bodies at 4 MiB (~2 min of 16 kHz WAV) — this never gets close.
+      timeoutRef.current = window.setTimeout(() => {
+        stopRecording()
+      }, 30000)
     } catch {
-      setError("microphone unavailable — check browser permissions")
+      setError("microphone unavailable")
       setState("idle")
       stopMic()
-      return
     }
-    if (session !== sessionRef.current) {
-      stopMic() // stopped while the permission prompt was open
-      return
-    }
+  }, [sendVoice, stopMic, stopRecording])
 
-    const ws = new WebSocket(
-      wsURL("/api/v1/voice/session", {
-        provider,
-        ...(llm ? { llm } : {}),
-      })
-    )
-    ws.binaryType = "arraybuffer"
-    wsRef.current = ws
+  /** Release to send: ends the recording; the request fires from onstop. */
+  const stop = useCallback(() => {
+    stopRecording()
+  }, [stopRecording])
 
-    ws.onopen = () => {
-      // Re-assert the mode on connect: covers a mode change that landed
-      // while the socket was still opening.
-      ws.send(JSON.stringify({ type: "config", provider, ...(llm && { llm }) }))
-      // Replay a hold that was pressed during the handshake.
-      if (holdRef.current)
-        ws.send(JSON.stringify({ type: "hold", active: true }))
-    }
-
-    ws.onmessage = (e) => {
-      if (typeof e.data !== "string") {
-        playReply(e.data as ArrayBuffer)
-        return
-      }
-      let msg: ServerMessage
-      try {
-        msg = JSON.parse(e.data) as ServerMessage
-      } catch {
-        return // ignore malformed frames rather than throwing in the handler
-      }
-      switch (msg.type) {
-        case "room":
-          setRoom(msg.id)
-          break
-        case "state":
-          setState(msg.value === "ended" ? "idle" : msg.value)
-          break
-        case "reply":
-          if (msg.heard !== undefined) setHeard(msg.heard)
-          if (msg.reply !== undefined) {
-            setReply(msg.reply)
-            // The gateway auto-captures the turn server-side (rules now,
-            // LLM enrichment a beat later); settle the memory panel to
-            // catch the refined fact.
-            onTurnRef.current?.()
-          }
-          break
-        case "error":
-          setError(msg.message)
-          break
-      }
-    }
-
-    ws.onerror = () => {
-      // onerror fires before onclose; the message is set here and the
-      // cleanup happens in onclose so both paths converge.
-      setError("voice session connection failed")
-    }
-
-    ws.onclose = () => {
-      if (wsRef.current === ws) wsRef.current = null
-      holdRef.current = false
-      stopPlayback()
-      stopMic()
-      setRoom(null)
-      setHolding(false)
-      setState("idle")
-    }
-  }, [llm, playReply, provider, startMic, stopMic, stopPlayback])
-
-  // Push-to-talk. The intent is recorded locally first so the button always
-  // responds, even if the socket is still connecting.
-  const holdStart = useCallback(() => {
-    holdRef.current = true
-    setHolding(true)
-    sendControl({ type: "hold", active: true })
-  }, [sendControl])
-
-  const holdEnd = useCallback(() => {
-    if (!holdRef.current) return
-    holdRef.current = false
-    setHolding(false)
-    sendControl({ type: "flush" })
-  }, [sendControl])
-
-  // Follow the mode dropdown without dropping a live room.
-  useEffect(() => {
-    sendControl({ type: "config", provider, ...(llm && { llm }) })
-  }, [llm, provider, sendControl])
-
-  // Release the socket, microphone and audio element on unmount. Without
-  // this the mic indicator stayed on after navigating away.
-  useEffect(() => {
-    return () => {
-      sessionRef.current += 1
-      wsRef.current?.close(1000, "component unmounted")
-      wsRef.current = null
-      stopPlayback()
-      stopMic()
-    }
-  }, [stopMic, stopPlayback])
+  /** Full teardown (leaving the voice stage): stop everything, discard. */
+  const abort = useCallback(() => {
+    stopRecording()
+    stopMic()
+    audioRef.current?.pause()
+    setState("idle")
+  }, [stopRecording, stopMic])
 
   return {
     state,
     volume,
-    room,
     heard,
     reply,
     error,
-    holding,
     start,
-    stop,
-    holdStart,
-    holdEnd,
+    stop: abort,
+    holdStart: () => {
+      void start()
+    },
+    holdEnd: stop,
   }
 }

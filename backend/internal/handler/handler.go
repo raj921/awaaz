@@ -73,7 +73,6 @@ func NewMux(h *Handler) *http.ServeMux {
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("POST /api/v1/chat", h.chat)
 	mux.HandleFunc("POST /api/v1/voice", h.voice)
-	mux.HandleFunc("GET /api/v1/voice/session", h.voiceSession)
 	mux.HandleFunc("POST /api/v1/warm", h.warm)
 	mux.HandleFunc("GET /api/v1/memory", h.memoryList)
 	mux.HandleFunc("POST /api/v1/memory", h.memoryAdd)

@@ -1,0 +1,8 @@
+.git
+.venv/
+__pycache__/
+frontend/
+data/
+graphify-out/
+node_modules/
+.scratch/

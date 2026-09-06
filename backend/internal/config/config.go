@@ -27,7 +27,9 @@ type Config struct {
 
 func FromEnv() Config {
 	return Config{
-		Addr:            envOr("ADDR", ":8080"),
+		// Hosts inject PORT (Railway/Render/Heroku); ADDR wins when set
+		// explicitly (Fly uses fly.toml's internal_port instead).
+		Addr:            envOr("ADDR", ":"+envOr("PORT", "8080")),
 		ChatURL:         envOr("CHAT_URL", "https://raj315920--qwen3-a1-serve-first-token.modal.run"),
 		VoiceURL:        envOr("VOICE_URL", "https://raj315920--voice-pipeline-voice-turn.modal.run"),
 		AsrURL:          envOr("ASR_URL", "https://raj315920--voice-pipeline-asr-turn.modal.run"),

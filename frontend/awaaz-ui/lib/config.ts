@@ -20,18 +20,31 @@ export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(
 );
 
 /**
+ * Gateway origin for the voice WebSocket.
+ *
+ * The socket connects DIRECTLY here, bypassing the Next rewrite proxy:
+ * rewrites only forward plain HTTP, so a ws:// upgrade sent same-origin
+ * dies inside the Next server and the room fails with a bare onerror
+ * ("voice session connection failed"). NEXT_PUBLIC_API_URL (same-origin
+ * fetch) is untouched by this.
+ *
+ * Default is the local dev gateway. Production MUST set
+ * NEXT_PUBLIC_GATEWAY_URL to the backend origin (wss follows https
+ * automatically), otherwise the socket resolves to the page host.
+ */
+export const GATEWAY_URL = (
+  process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:18080"
+).replace(/\/+$/, "");
+
+/**
  * Absolute WebSocket URL for the gateway.
  *
- * Derived from API_URL so http→ws and https→wss always match; a hard-coded
- * scheme breaks the moment the app is served over TLS, because browsers
- * refuse a ws:// connection from an https:// page. With a same-origin API
- * base the page's own location supplies the host.
+ * Derived from GATEWAY_URL so http→ws and https→wss always match; a
+ * hard-coded scheme breaks the moment the app is served over TLS, because
+ * browsers refuse a ws:// connection from an https:// page.
  */
 export function wsURL(path: string, params?: Record<string, string>): string {
-  const base =
-    API_URL ||
-    (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
-  const url = new URL(base);
+  const url = new URL(GATEWAY_URL);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.pathname = path;
   url.search = params ? new URLSearchParams(params).toString() : "";

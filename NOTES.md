@@ -546,3 +546,31 @@ Per KuralHub (the current survey of record), the entire hi/te speech-emotion uni
 - Pasted design applied against this checkout, with three fixes found by testing, not review: (1) the pasted `extract_facts_llm` signature was truncated mid-line — repaired; (2) its grounding docstring promised more than the math delivers (single-word inventions in 3-word facts score 0.67) — docstring now states the real guarantee, verified: wholesale invention drops, legit rewrites pass; (3) the pasted /observe route read the wrong body key ("text" via _text_arg instead of "utterance") and 422d every call — caught live, fixed.
 - Missing foundation built, not assumed: wrote `research/memory/extract.py` (trilingual first-person cue lists, mark-attached tokenizing like memory_v2.WORD; 13/14 behavior probes pass) since no extract.py exists here. Also added what the paste never specified: the /observe route itself and the Go caller (fire-and-forget per chat + voice turn, detached context — replies never wait).
 - Verified live with Sarvam: rules capture "My name is Raju" synchronously; sideways "been at the hospital fifteen years" captures nothing immediately, then the background worker stores the clean rewrite seconds later; filler/questions/commands store nothing; forget still hard-deletes. UI settles via refreshSoon after both turn types. Test facts cleaned; sidecar left running enriched, backend restarted on the new binary.
+
+## 2026-09-06 — Part 51: Room connection failed — socket vs rewrite proxy
+
+- User: "voice session connection failed" on room open. Root cause: the arena's same-origin rewrite proxies HTTP only — a ws:// upgrade sent to :3000 dies inside the Next server, and the rewrite default pointed at :8080 (nothing listens there; our gateway is :18080), so even plain API calls were proxied into the void.
+- Fix: the socket now connects DIRECTLY to the gateway (new NEXT_PUBLIC_GATEWAY_URL, dev default localhost:18080; production must set it — wss follows https). Fetch keeps the same-origin rewrite (default corrected to :18080). Verified: rewrite proxies healthz OK; direct WS handshake with a browser Origin returns 101.
+- Side note: killed a stray next-server (v16.3.4, running since Tuesday, not on our ports, not this project's version) while restarting dev — flagging in case it was something else of yours.
+
+## 2026-09-06 — Part 52: Turn split on a 1-frame lapse — VAD race fixed
+
+- User: without holding, listening ends mid-sentence and answers arrive in wrong/fragmented language. Log caught it: two turns flushed `reason=max seconds=2.5` each (maxTurnBytes is 25 s = 800 KB, impossible) — every frame count flushed, including the first silence. Cause: the arena's silence flush `silent := time.Since(lastLoud) > 1600ms` has a one-chunk race — a quiet frame landing just past the window ends the turn mid-pause, whisper gets 0.5–2 s fragments and babbles in the wrong language ("వల", "లా నార్").
+- Fix: silence flushes on chunk persistence (silentChunks > 0 && window elapsed) — one quiet frame can never end a sentence; only sustained silence can. Real mid-word noise spikes still could (classifier ceiling, named); hold-to-talk bypasses all of this.
+- Verified with the user's exact scenario: 2.5 s speech → 1.2 s lapse → speech resumes → ONE turn with the full coherent transcript, Sarvam reply; the two languages no longer mix across split turns. Go tests green, backend restarted on the fix.
+
+## 2026-09-06 — Part 53: Voice room deleted — back to push-to-talk HTTP
+
+- User decision: the WebSocket room caused more problems than it solved (auto-listen without hold, mid-sentence auto-flushes, wrong-language fragments). Deleted entirely: `voice_session.go`, `ws.go`, `ws_test.go`, the session route (now 404), and the frontend room. Back to the pre-room shape: hold the button → MediaRecorder records → release ends the turn → one POST /api/v1/voice → reply plays. No VAD anywhere: a pause can never cut a sentence, by construction.
+- Verified: hybrid text path (Sarvam reply + valid RIFF audio), session route 404, Go vet/tests/build, frontend typecheck/lint/build. The stale silentWavProbe reference in handler_test fixed (was the only compile break after the delete).
+
+## 2026-09-06 — Part 55: "gibberish Hindi on English speech" — whisper misheard, not the LLM
+
+- User: said "hi, how are you, I am speaking in Hindi" (English audio) and got Devanagari nonsense back. Log+repro prove the pipeline is fine: the SAME text in text-mode comes back as a coherent Hindi reply from Sarvam. The gibberish is whisper's: our hi/te-tuned small model hallucinates Devanagari for any English audio ("ए यह कैन यह यहर में लेक..."), so every downstream stage (Sarvam, TTS) gets a broken heard text. ASR ceiling, not LLM, TTS, room, or frontend.
+- Verified facts the user can trust: LLM answers in the transcript's language (English in → English reply; Hindi in → Hindi reply). The only real limiter is English AUDIO into our whisper.
+- Options named, none built yet: (a) speak Hindi/Telugu to ours; (b) flip to full Sarvam voice for English speech (Saaras auto-detects); (c) swap Sarvam ASR into the hybrid as an option; (d) detect English speech and route there automatically. User asked for the check, not a build.
+
+## 2026-09-06 — Part 51: Public-hosting prep (uncommitted)
+
+- Backend now honors $PORT (hosts inject it; ADDR still wins). New root Dockerfile: Go build stage + python:3.12-slim runtime, sidecar + gateway via start.sh, no pip step (stdlib-only both sides). No local docker daemon, so the image is unbuilt-tested — first deploy will prove it.
+- Hosting map: Vercel (frontend/awaaz-ui, 2 env vars) + Railway (root Dockerfile, volume on /data, secrets) + Modal unchanged.

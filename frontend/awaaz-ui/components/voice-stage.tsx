@@ -8,26 +8,23 @@ import {
 import type { VoiceSession, VoiceState } from "@/hooks/use-voice-session"
 
 const STATUS_LABEL: Record<VoiceState, string> = {
-  idle: "Tap to start",
-  connecting: "Connecting",
-  listening: "Listening",
+  idle: "Hold to talk",
+  recording: "Listening",
   thinking: "Thinking",
   speaking: "Speaking",
 }
 
 /**
- * The session state and the orb's visual state are deliberately separate
- * vocabularies. The old page conflated them — it mapped "thinking" onto the
- * orb's "connecting" and then used that same value to label the UI, so the
- * status text read "Thinking" while the socket was still connecting and
- * there was no way to tell a slow handshake from a slow model.
+ * The turn state and the orb's visual state are deliberately separate
+ * vocabularies. There is no socket anymore: "thinking" means the request is
+ * in flight, "speaking" means the reply audio is playing, and idle/recording
+ * are the two mic states.
  */
 function orbState(state: VoiceState): VoiceOrbState {
   switch (state) {
-    case "connecting":
     case "thinking":
       return "connecting"
-    case "listening":
+    case "recording":
       return "listening"
     case "speaking":
       return "speaking"
@@ -37,10 +34,10 @@ function orbState(state: VoiceState): VoiceOrbState {
 }
 
 export function VoiceStage({ session }: { session: VoiceSession }) {
-  const { state, volume, room, heard, reply, error, holding } = session
+  const { state, volume, heard, reply, error } = session
   const orb = orbState(state)
-  const live = state === "listening" || state === "speaking"
-  const busy = live || state === "connecting" || state === "thinking"
+  const live = state === "recording" || state === "speaking"
+  const busy = live || state === "thinking"
 
   return (
     <section className="flex min-h-[calc(100svh-11rem)] w-full flex-col items-center justify-center text-center md:min-h-0">
@@ -107,8 +104,7 @@ export function VoiceStage({ session }: { session: VoiceSession }) {
               హలో చెప్పండి
             </p>
             <p className="pt-1.5 text-xs text-white/40">
-              Open a room, hold to talk — release to send. Pauses never cut you
-              off.
+              Hold the button, speak, release to send. Pauses never cut you off.
             </p>
           </>
         )}
@@ -124,54 +120,50 @@ export function VoiceStage({ session }: { session: VoiceSession }) {
           className="ab-pill-glow absolute inset-x-4 -bottom-2 h-4 rounded-full"
           aria-hidden
         />
-        {!room ? (
+        <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => void session.start()}
-            disabled={state === "connecting"}
-            className="relative flex h-12 items-center gap-2 rounded-full bg-white px-8 text-sm font-medium text-[#0c0c0c] transition-[filter,transform] hover:brightness-95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+            // Pointer events cover mouse, touch and pen in one path.
+            // Capture keeps the release on this element even if the finger
+            // slides off, so a drag can no longer strand the recording.
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId)
+              session.holdStart()
+            }}
+            onPointerUp={session.holdEnd}
+            onPointerCancel={session.holdEnd}
+            onLostPointerCapture={session.holdEnd}
+            // Keyboard parity: space/enter hold while pressed.
+            onKeyDown={(e) => {
+              if ((e.key === " " || e.key === "Enter") && !e.repeat) {
+                e.preventDefault()
+                session.holdStart()
+              }
+            }}
+            onKeyUp={(e) => {
+              if (e.key === " " || e.key === "Enter") {
+                e.preventDefault()
+                session.holdEnd()
+              }
+            }}
+            aria-pressed={state === "recording"}
+            disabled={state === "thinking" || state === "speaking"}
+            className={`relative flex h-12 touch-none items-center gap-2 rounded-full px-8 text-sm font-medium transition-[filter,transform] select-none active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 ${
+              state === "recording"
+                ? "ab-grad text-[#0c0c0c]"
+                : "bg-white text-[#0c0c0c] hover:brightness-95"
+            }`}
           >
             <MicIcon className="size-4" />
-            {state === "connecting" ? "Connecting…" : "Talk"}
+            {state === "recording"
+              ? "Release to send"
+              : state === "thinking"
+                ? "Thinking…"
+                : state === "speaking"
+                  ? "Speaking…"
+                  : "Hold to talk"}
           </button>
-        ) : (
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              // Pointer events cover mouse, touch and pen in one path.
-              // Capture keeps the release on this element even if the finger
-              // slides off, so a drag can no longer strand the room in a
-              // permanently-held state.
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId)
-                session.holdStart()
-              }}
-              onPointerUp={session.holdEnd}
-              onPointerCancel={session.holdEnd}
-              onLostPointerCapture={session.holdEnd}
-              // Keyboard parity: space/enter hold while pressed.
-              onKeyDown={(e) => {
-                if ((e.key === " " || e.key === "Enter") && !e.repeat) {
-                  e.preventDefault()
-                  session.holdStart()
-                }
-              }}
-              onKeyUp={(e) => {
-                if (e.key === " " || e.key === "Enter") {
-                  e.preventDefault()
-                  session.holdEnd()
-                }
-              }}
-              aria-pressed={holding}
-              className={`relative flex h-12 touch-none items-center gap-2 rounded-full px-8 text-sm font-medium transition-[filter,transform] select-none active:scale-95 ${
-                holding
-                  ? "ab-grad text-[#0c0c0c]"
-                  : "bg-white text-[#0c0c0c] hover:brightness-95"
-              }`}
-            >
-              <MicIcon className="size-4" />
-              {holding ? "Release to send" : "Hold to talk"}
-            </button>
+          {state !== "idle" && (
             <button
               type="button"
               onClick={session.stop}
@@ -179,8 +171,8 @@ export function VoiceStage({ session }: { session: VoiceSession }) {
             >
               End
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </section>
   )
