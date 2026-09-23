@@ -60,6 +60,13 @@ Training and serving scripts live in `research/training/` with their commands in
 
 `research/spec.md` is the original research plan. `research/DATASET_CARD.md`, `research/ANNOTATION_PROTOCOL.md`, and `research/benchmark/` are the data and collection specs. `NOTES.md` is the full build log. `results/` holds every measured number as JSON. `ARTICLE.md` and `JOURNEY.md` are my own writeups in my own words.
 
+## Technical docs
+
+- [System architecture](docs/architecture.md) — services, request flows, and deployment layout.
+- [Gateway API](docs/gateway-api.md) — routes, request fields, and response shapes.
+- [Memory sidecar](docs/memory.md) — capture, persistence, and explicit forgetting.
+- [Local development](docs/development.md) — start the services and run checks.
+
 ## References
 
 Datasets I used:
