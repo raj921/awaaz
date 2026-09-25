@@ -1,7 +1,3 @@
-
-
-
-
 # Awaaz
 
 Voice and chat AI that speaks Hindi and Telugu for real. Not translated English in a Hindi mask: every training sentence was written or spoken by a native speaker, and the numbers below are measured, low where they are low.
